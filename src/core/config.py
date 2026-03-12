@@ -1,0 +1,25 @@
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_prefix="JOTA_", env_file=".env", extra="ignore")
+
+    engine: str = "mock"
+    kokoro_model: str = "kokoro-v0_19.onnx"
+    kokoro_voice: str = "af"
+    sample_rate: int = 24000
+    min_flush_chars: int = 80
+    auth_provider: str = "stub"
+    jota_db_url: str = "http://localhost:8001"
+    jota_db_auth_path: str = "/auth/validate"
+    jota_db_timeout: float = 5.0
+
+
+_settings: Settings | None = None
+
+
+def get_settings() -> Settings:
+    global _settings
+    if _settings is None:
+        _settings = Settings()
+    return _settings

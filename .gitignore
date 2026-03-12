@@ -1,0 +1,57 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Editable installs
+*.dist-info/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Models (mounted at runtime, never committed)
+*.onnx
+*.bin
+*.pt
+*.pth
+models/
+
+# Test / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.xml
+.tox/
+
+# MyPy / type checkers
+.mypy_cache/
+.dmypy.json
+.pyright/
+
+# Ruff / linters
+.ruff_cache/
+
+# IDEs
+.vscode/
+.idea/
+*.iml
+
+# macOS
+.DS_Store
+
+# Logs
+*.log
