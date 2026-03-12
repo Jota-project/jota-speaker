@@ -32,6 +32,11 @@ from src.server.ws_handler import router  # noqa: E402
 app.include_router(router)
 
 
+@app.get("/health")
+async def health() -> dict:
+    return {"status": "ok"}
+
+
 if __name__ == "__main__":
     import uvicorn
 

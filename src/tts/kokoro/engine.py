@@ -14,13 +14,21 @@ _CHUNK_SAMPLES = 4800  # 200ms at 24 kHz
 class KokoroEngine(ITTSEngine):
     """Runs Kokoro ONNX inference in a thread pool to avoid blocking the event loop."""
 
-    def __init__(self, model_path: str, voice: str, sample_rate: int = 24000) -> None:
+    def __init__(
+        self,
+        model_path: str,
+        voices_path: str,
+        voice: str = "af_heart",
+        lang: str = "en-us",
+        sample_rate: int = 24000,
+    ) -> None:
         from kokoro_onnx import Kokoro  # type: ignore[import-untyped]
 
         self._voice = voice
+        self._lang = lang
         self._sample_rate = sample_rate
         logger.info("Loading Kokoro model from %s …", model_path)
-        self._kokoro = Kokoro(model_path, "voices.json")
+        self._kokoro = Kokoro(model_path, voices_path)
         logger.info("Kokoro model loaded.")
 
     @property
@@ -41,5 +49,5 @@ class KokoroEngine(ITTSEngine):
     # ── sync (runs in thread pool) ────────────────────────────────────────────
 
     def _run_inference(self, text: str) -> np.ndarray:
-        samples, _ = self._kokoro.create(text, voice=self._voice, speed=1.0, lang="en-us")
+        samples, _ = self._kokoro.create(text, voice=self._voice, speed=1.0, lang=self._lang)
         return samples.astype(np.float32)

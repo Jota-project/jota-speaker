@@ -11,7 +11,9 @@ def create_engine(settings: Settings) -> ITTSEngine:
             from src.tts.kokoro.engine import KokoroEngine
             return KokoroEngine(
                 model_path=settings.kokoro_model,
+                voices_path=settings.kokoro_voices,
                 voice=settings.kokoro_voice,
+                lang=settings.kokoro_lang,
                 sample_rate=settings.sample_rate,
             )
         case _:

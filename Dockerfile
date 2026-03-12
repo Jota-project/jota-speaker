@@ -3,32 +3,33 @@ FROM python:3.11-slim AS builder
 
 WORKDIR /app
 
-# Install build deps
 RUN pip install --upgrade pip hatchling
 
 COPY pyproject.toml ./
 COPY src/ ./src/
 
-# Install production dependencies into a prefix we can copy
-RUN pip install --prefix=/install --no-cache-dir ".[dev]" || \
-    pip install --prefix=/install --no-cache-dir .
+RUN pip install --prefix=/install --no-cache-dir .
 
 # ── runtime ───────────────────────────────────────────────────────────────────
 FROM python:3.11-slim AS runtime
 
 WORKDIR /app
 
-# Copy installed packages from builder
-COPY --from=builder /install /usr/local
+# espeak-ng required by kokoro-onnx phonemizer
+RUN apt-get update && apt-get install -y --no-install-recommends espeak-ng && \
+    rm -rf /var/lib/apt/lists/*
 
-# Copy application source
+COPY --from=builder /install /usr/local
 COPY --from=builder /app/src ./src
 
-# Kokoro models are expected to be mounted at runtime, not baked in
+# Models are mounted at runtime via volume or bind-mount
 VOLUME ["/models"]
 
 ENV JOTA_ENGINE=mock \
-    JOTA_KOKORO_MODEL=/models/kokoro-v0_19.onnx \
+    JOTA_KOKORO_MODEL=/models/kokoro-v1.0.int8.onnx \
+    JOTA_KOKORO_VOICES=/models/voices-v1.0.bin \
+    JOTA_KOKORO_VOICE=af_heart \
+    JOTA_KOKORO_LANG=en-us \
     JOTA_AUTH_PROVIDER=stub
 
 EXPOSE 8002
