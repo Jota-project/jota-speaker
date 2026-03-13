@@ -142,3 +142,30 @@ def test_pcm16_frames_even_length():
     assert len(frames) > 0
     for frame in frames:
         assert len(frame) % 2 == 0
+
+
+# 8. Session timeout closes connection with error
+def test_session_timeout():
+    settings = Settings(engine="mock", auth_provider="stub", min_flush_chars=5, session_timeout=0.05)
+    client = _make_client(settings)
+    with client.websocket_connect("/ws") as ws:
+        _auth(ws)
+        # Send nothing — wait for server-side timeout
+        data = ws.receive()
+        assert data["type"] == "websocket.send"
+        msg = json.loads(data["text"])
+        assert msg["type"] == "error"
+        assert msg["code"] == "session_timeout"
+
+
+# 9. Full queue sends error and aborts session
+def test_queue_full():
+    # queue_maxsize=1: first segment fills queue; second triggers QueueFull
+    settings = Settings(engine="mock", auth_provider="stub", min_flush_chars=5, queue_maxsize=1)
+    client = _make_client(settings)
+    with client.websocket_connect("/ws") as ws:
+        _auth(ws)
+        # "Hi. Bye. Hello." → 3 segments with min_flush_chars=5; 2nd put will overflow
+        ws.send_text(json.dumps({"type": "token", "text": "Hi. Bye. Hello."}))
+        messages, _ = _collect(ws)
+    assert any(m["type"] == "error" and m["code"] == "queue_full" for m in messages)

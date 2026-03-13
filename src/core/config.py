@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     jota_db_url: str = "http://localhost:8001"
     jota_db_auth_path: str = "/auth/validate"
     jota_db_timeout: float = 5.0
+    session_timeout: float = 300.0
+    queue_maxsize: int = 100
 
 
 _settings: Settings | None = None

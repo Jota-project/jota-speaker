@@ -18,6 +18,8 @@ async def websocket_endpoint(ws: WebSocket) -> None:
         engine=state.engine,
         auth=state.auth,
         min_flush_chars=state.settings.min_flush_chars,
+        queue_maxsize=state.settings.queue_maxsize,
+        session_timeout=state.settings.session_timeout,
     )
     try:
         await session.run()

@@ -8,7 +8,7 @@ Tres tareas corren en paralelo vía asyncio.gather:
   - audio_player    → drena la queue y escribe en sounddevice en tiempo real
 
 Uso:
-    python3 scripts/ws_smoke_test.py [--url ws://localhost:8002/ws] [--token TOKEN] [--no-play]
+    python3 scripts/ws_smoke_test.py [--url ws://localhost:8005/ws] [--token TOKEN] [--no-play]
 """
 
 import argparse
@@ -200,7 +200,7 @@ async def run(url: str, token: str, play: bool, sample_rate: int) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="jota-speaker WS smoke test")
-    parser.add_argument("--url", default="ws://localhost:8002/ws")
+    parser.add_argument("--url", default="ws://localhost:8005/ws")
     parser.add_argument("--token", default="smoke-test")
     parser.add_argument("--no-play", dest="play", action="store_false",
                         help="recibe audio pero no lo reproduce")

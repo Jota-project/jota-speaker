@@ -1,4 +1,6 @@
 import asyncio
+import logging
+import uuid
 from typing import Any
 
 from fastapi.websockets import WebSocketState
@@ -23,10 +25,15 @@ from .protocol import (
     serialize_server_message,
 )
 
-logger = get_logger(__name__)
+_base_logger = get_logger(__name__)
 
 # Sentinel pushed into the queue to signal end-of-stream
 _SENTINEL = object()
+
+
+class _SidAdapter(logging.LoggerAdapter):
+    def process(self, msg: str, kwargs: Any) -> tuple[str, Any]:
+        return f"[sid={self.extra['sid']}] {msg}", kwargs
 
 
 class SpeakerSession:
@@ -36,25 +43,40 @@ class SpeakerSession:
         engine: ITTSEngine,
         auth: IAuthProvider,
         min_flush_chars: int = 80,
+        queue_maxsize: int = 100,
+        session_timeout: float = 300.0,
     ) -> None:
         self._ws = ws
         self._engine = engine
         self._auth = auth
         self._accumulator = TokenAccumulator(min_flush_chars=min_flush_chars)
-        self._queue: asyncio.Queue[str | object] = asyncio.Queue()
+        self._queue: asyncio.Queue[str | object] = asyncio.Queue(maxsize=queue_maxsize)
         self._chunk_counter = 0
+        self._session_timeout = session_timeout
+        self._tts_task: asyncio.Task | None = None
+        self._id = uuid.uuid4().hex[:8]
+        self._log = _SidAdapter(_base_logger, {"sid": self._id})
 
     # ── public entry point ────────────────────────────────────────────────────
 
     async def run(self) -> None:
         await self._ws.accept()
+        self._log.info("Session started")
         if not await self._authenticate():
             return
-        tts_task = asyncio.create_task(self._tts_worker())
+        self._tts_task = asyncio.create_task(self._tts_worker())
         try:
-            await self._receive_loop()
+            await asyncio.wait_for(self._receive_loop(), timeout=self._session_timeout)
+        except asyncio.TimeoutError:
+            self._log.warning("Session timeout after %.0fs", self._session_timeout)
+            await self._send(ErrorMessage(code="session_timeout", message="Session timed out"))
+            self._tts_task.cancel()
         finally:
-            await tts_task
+            try:
+                await self._tts_task
+            except asyncio.CancelledError:
+                pass
+        self._log.info("Session ended")
 
     # ── authentication ────────────────────────────────────────────────────────
 
@@ -75,7 +97,7 @@ class SpeakerSession:
         try:
             valid = await self._auth.validate(msg.token)
         except Exception as exc:
-            logger.error("Auth provider error: %s", exc)
+            self._log.error("Auth provider error: %s", exc)
             await self._send(ErrorMessage(code="auth_error", message="Auth service unavailable"))
             await self._ws.close(code=1011)
             return False
@@ -101,22 +123,24 @@ class SpeakerSession:
                     continue
 
                 if isinstance(msg, TokenMessage):
-                    segments = self._accumulator.add(msg.text)
-                    for seg in segments:
-                        await self._queue.put(seg)
+                    for seg in self._accumulator.add(msg.text):
+                        if not await self._put(seg):
+                            return
 
                 elif isinstance(msg, FlushMessage):
                     for seg in self._accumulator.flush():
-                        await self._queue.put(seg)
+                        if not await self._put(seg):
+                            return
 
                 elif isinstance(msg, EndMessage):
                     for seg in self._accumulator.flush():
-                        await self._queue.put(seg)
+                        if not await self._put(seg):
+                            return
                     await self._queue.put(_SENTINEL)
                     return
 
         except Exception as exc:
-            logger.warning("Receive loop ended: %s", exc)
+            self._log.warning("Receive loop ended: %s", exc)
             await self._queue.put(_SENTINEL)
 
     # ── TTS worker ────────────────────────────────────────────────────────────
@@ -149,6 +173,18 @@ class SpeakerSession:
         await self._send(AudioEndMessage(chunk_id=chunk_id))
 
     # ── helpers ───────────────────────────────────────────────────────────────
+
+    async def _put(self, seg: str) -> bool:
+        """Enqueue a segment. Returns False and aborts session if queue is full."""
+        try:
+            self._queue.put_nowait(seg)
+            return True
+        except asyncio.QueueFull:
+            self._log.error("Synthesis queue full — aborting session")
+            await self._send(ErrorMessage(code="queue_full", message="Synthesis queue full"))
+            if self._tts_task:
+                self._tts_task.cancel()
+            return False
 
     async def _send(self, msg: Any) -> None:
         if self._ws.client_state == WebSocketState.CONNECTED:

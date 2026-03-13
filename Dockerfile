@@ -32,6 +32,6 @@ ENV JOTA_ENGINE=mock \
     JOTA_KOKORO_LANG=en-us \
     JOTA_AUTH_PROVIDER=stub
 
-EXPOSE 8002
+EXPOSE 8005
 
 CMD ["python", "-m", "src.main"]

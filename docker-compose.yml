@@ -3,7 +3,7 @@ services:
   jota-speaker:
     build: .
     ports:
-      - "8002:8002"
+      - "8005:8005"
     volumes:
       - ./models:/models   # coloca aquí kokoro-v1.0.int8.onnx y voices-v1.0.bin
     environment:
@@ -14,7 +14,7 @@ services:
       JOTA_KOKORO_LANG: en-us
       JOTA_AUTH_PROVIDER: stub
     healthcheck:
-      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8002/health')"]
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8005/health')"]
       interval: 10s
       timeout: 5s
       retries: 3
