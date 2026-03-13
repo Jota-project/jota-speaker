@@ -1,32 +1,11 @@
 services:
 
-  # ── descarga modelos si no existen ──────────────────────────────────────────
-  model-downloader:
-    image: alpine:latest
-    volumes:
-      - models:/models
-    entrypoint:
-      - sh
-      - -c
-      - |
-        apk add --no-cache curl
-        cd /models
-        for FILE in kokoro-v1.0.int8.onnx voices-v1.0.bin; do
-          if [ ! -f "$$FILE" ]; then
-            echo "Downloading $$FILE ..."
-            curl -fLO "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/$$FILE"
-          else
-            echo "$$FILE already present, skipping."
-          fi
-        done
-
-  # ── servicio principal ───────────────────────────────────────────────────────
   jota-speaker:
     build: .
     ports:
       - "8002:8002"
     volumes:
-      - models:/models
+      - ./models:/models   # coloca aquí kokoro-v1.0.int8.onnx y voices-v1.0.bin
     environment:
       JOTA_ENGINE: kokoro
       JOTA_KOKORO_MODEL: /models/kokoro-v1.0.int8.onnx
@@ -34,15 +13,9 @@ services:
       JOTA_KOKORO_VOICE: af_heart
       JOTA_KOKORO_LANG: en-us
       JOTA_AUTH_PROVIDER: stub
-    depends_on:
-      model-downloader:
-        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8002/health')"]
       interval: 10s
       timeout: 5s
       retries: 3
       start_period: 30s
-
-volumes:
-  models:

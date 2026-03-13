@@ -28,7 +28,8 @@ env/
 *.bin
 *.pt
 *.pth
-models/
+models/*
+!models/.gitkeep
 
 # Test / coverage
 .pytest_cache/
