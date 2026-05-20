@@ -24,7 +24,10 @@ class WyomingHandler:
                 if event_type == "synthesize":
                     text = data.get("text", "")
                     if text:
-                        await self._synthesize(writer, text)
+                        try:
+                            await self._synthesize(writer, text)
+                        except Exception:
+                            logger.exception("Synthesis error for text=%r", text)
         except (asyncio.IncompleteReadError, ConnectionResetError):
             pass
         finally:

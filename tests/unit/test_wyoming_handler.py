@@ -99,3 +99,23 @@ async def test_chunk_payloads_are_valid_pcm16():
     for event_type, _, payload in writer.parse_events():
         if event_type == "audio-chunk":
             assert len(payload) % 2 == 0, "PCM16 payload must be even-length bytes"
+
+
+async def test_engine_exception_does_not_crash_handler():
+    from src.tts.interface import ITTSEngine
+    from typing import AsyncIterator
+
+    class FailingEngine(ITTSEngine):
+        @property
+        def sample_rate(self) -> int:
+            return 24000
+
+        async def synthesize(self, text: str) -> AsyncIterator[bytes]:
+            raise RuntimeError("engine failure")
+            yield  # make it an async generator
+
+    handler = WyomingHandler(FailingEngine(), Settings(engine="mock"))
+    writer = _FakeWriter()
+    await handler.handle(_reader_with_synthesize("Hello"), writer)
+    # Should complete without raising, writer should be closed
+    assert writer.closed
