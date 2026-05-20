@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     jota_db_timeout: float = 5.0
     session_timeout: float = 300.0
     queue_maxsize: int = 100
+    wyoming_enabled: bool = True
+    wyoming_port: int = 20424
 
 
 _settings: Settings | None = None
