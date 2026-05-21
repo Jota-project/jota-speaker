@@ -14,14 +14,27 @@ logger = get_logger(__name__)
 async def lifespan(app: FastAPI):
     settings: Settings = get_settings()
     logger.info(
-        "Starting jota-speaker (engine=%s, auth=%s)",
+        "Starting jota-speaker (engine=%s, auth=%s, wyoming=%s)",
         settings.engine,
         settings.auth_provider,
+        settings.wyoming_enabled,
     )
     app.state.settings = settings
     app.state.engine = create_engine(settings)
     app.state.auth = create_auth_provider(settings)
+
+    if settings.wyoming_enabled:
+        from src.wyoming.server import WyomingServer
+
+        wyoming = WyomingServer(settings, app.state.engine)
+        await wyoming.start()
+        app.state.wyoming_server = wyoming
+
     yield
+
+    if hasattr(app.state, "wyoming_server"):
+        await app.state.wyoming_server.stop()
+
     logger.info("Shutting down jota-speaker")
 
 
