@@ -4,6 +4,7 @@ services:
     build: .
     ports:
       - "8005:8005"
+      - "20424:20424"
     volumes:
       - ./models:/models   # coloca aquí kokoro-v1.0.int8.onnx y voices-v1.0.bin
     environment:
@@ -13,6 +14,8 @@ services:
       JOTA_KOKORO_VOICE: af_heart
       JOTA_KOKORO_LANG: en-us
       JOTA_AUTH_PROVIDER: stub
+      JOTA_WYOMING_ENABLED: "true"
+      JOTA_WYOMING_PORT: "20424"
     healthcheck:
       test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8005/health')"]
       interval: 10s
