@@ -42,12 +42,20 @@ class WyomingHandler:
 
     async def _describe(self, writer) -> None:
         await write_event(writer, "info", {
+            "asr": [],
             "tts": [{
                 "name": "jota-speaker",
+                "description": "jota-speaker TTS",
                 "attribution": {"name": "jota-speaker", "url": ""},
                 "installed": True,
+                "version": None,
                 "languages": [self._settings.kokoro_lang],
-            }]
+                "voices": [],
+            }],
+            "wake": [],
+            "handle": [],
+            "intent": [],
+            "satellite": None,
         })
 
     async def _synthesize(self, writer, text: str) -> None:
