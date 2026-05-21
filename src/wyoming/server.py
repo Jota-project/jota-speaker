@@ -21,6 +21,8 @@ class WyomingServer:
         return self._server.sockets[0].getsockname()[1]
 
     async def start(self) -> None:
+        if self._server is not None:
+            raise RuntimeError("Server already started")
         handler = WyomingHandler(self._engine, self._settings)
         self._server = await asyncio.start_server(
             handler.handle,
