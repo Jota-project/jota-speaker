@@ -48,14 +48,12 @@ class WyomingHandler:
                 "description": "jota-speaker TTS",
                 "attribution": {"name": "jota-speaker", "url": ""},
                 "installed": True,
-                "version": None,
                 "languages": [self._settings.kokoro_lang],
                 "voices": [{
                     "name": self._settings.kokoro_voice,
                     "description": self._settings.kokoro_voice,
                     "attribution": {"name": "jota-speaker", "url": ""},
                     "installed": True,
-                    "version": None,
                     "languages": [self._settings.kokoro_lang],
                     "speakers": [],
                 }],
@@ -63,7 +61,6 @@ class WyomingHandler:
             "wake": [],
             "handle": [],
             "intent": [],
-            "satellite": None,
         })
 
     async def _synthesize(self, writer, text: str) -> None:
