@@ -102,7 +102,7 @@ async def test_chunk_payloads_are_valid_pcm16():
 
 
 async def test_describe_returns_info_with_language():
-    handler = WyomingHandler(MockEngine(), Settings(engine="mock", kokoro_lang="en-us"))
+    handler = WyomingHandler(MockEngine(), Settings(engine="mock", kokoro_lang="es"))
     writer = _FakeWriter()
     line = json.dumps({"type": "describe"}) + "\n"
     r = asyncio.StreamReader()
@@ -114,7 +114,7 @@ async def test_describe_returns_info_with_language():
     tts = events[0][1]["tts"]
     assert len(tts) == 1
     assert tts[0]["name"] == "jota-speaker"
-    assert "en-us" in tts[0]["languages"]
+    assert "es" in tts[0]["languages"]
 
 
 async def test_engine_exception_does_not_crash_handler():

@@ -28,8 +28,8 @@ VOLUME ["/models"]
 ENV JOTA_ENGINE=mock \
     JOTA_KOKORO_MODEL=/models/kokoro-v1.0.int8.onnx \
     JOTA_KOKORO_VOICES=/models/voices-v1.0.bin \
-    JOTA_KOKORO_VOICE=af_heart \
-    JOTA_KOKORO_LANG=en-us \
+    JOTA_KOKORO_VOICE=ef_dora \
+    JOTA_KOKORO_LANG=es \
     JOTA_AUTH_PROVIDER=stub \
     JOTA_WYOMING_ENABLED=true \
     JOTA_WYOMING_PORT=20424
