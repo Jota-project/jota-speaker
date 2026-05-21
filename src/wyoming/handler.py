@@ -21,7 +21,9 @@ class WyomingHandler:
                 event_type, data, _ = await read_event(reader)
                 if not event_type:
                     break
-                if event_type == "synthesize":
+                if event_type == "describe":
+                    await self._describe(writer)
+                elif event_type == "synthesize":
                     text = data.get("text", "")
                     if text:
                         try:
@@ -37,6 +39,16 @@ class WyomingHandler:
             except Exception:
                 pass
             logger.info("Wyoming connection closed %s", peer)
+
+    async def _describe(self, writer) -> None:
+        await write_event(writer, "info", {
+            "tts": [{
+                "name": "jota-speaker",
+                "attribution": {"name": "jota-speaker", "url": ""},
+                "installed": True,
+                "languages": [self._settings.kokoro_lang],
+            }]
+        })
 
     async def _synthesize(self, writer, text: str) -> None:
         rate = self._engine.sample_rate

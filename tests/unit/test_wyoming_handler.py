@@ -101,6 +101,22 @@ async def test_chunk_payloads_are_valid_pcm16():
             assert len(payload) % 2 == 0, "PCM16 payload must be even-length bytes"
 
 
+async def test_describe_returns_info_with_language():
+    handler = WyomingHandler(MockEngine(), Settings(engine="mock", kokoro_lang="en-us"))
+    writer = _FakeWriter()
+    line = json.dumps({"type": "describe"}) + "\n"
+    r = asyncio.StreamReader()
+    r.feed_data(line.encode())
+    r.feed_eof()
+    await handler.handle(r, writer)
+    events = writer.parse_events()
+    assert events[0][0] == "info"
+    tts = events[0][1]["tts"]
+    assert len(tts) == 1
+    assert tts[0]["name"] == "jota-speaker"
+    assert "en-us" in tts[0]["languages"]
+
+
 async def test_engine_exception_does_not_crash_handler():
     from src.tts.interface import ITTSEngine
     from typing import AsyncIterator
