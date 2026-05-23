@@ -11,6 +11,11 @@ async def read_event(
     header = json.loads(line.decode())
     event_type = header.get("type", "")
     data = header.get("data", {})
+    # wyoming library sends event data as a separate block after the header line
+    data_length = header.get("data_length", 0)
+    if data_length > 0:
+        data_bytes = await reader.readexactly(data_length)
+        data.update(json.loads(data_bytes))
     payload_length = header.get("payload_length", 0)
     payload = await reader.readexactly(payload_length) if payload_length else b""
     return event_type, data, payload
