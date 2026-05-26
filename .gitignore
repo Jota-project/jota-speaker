@@ -56,3 +56,6 @@ coverage.xml
 
 # Logs
 *.log
+
+# Internal dev docs (specs, plans) — not for public repo
+docs/superpowers/

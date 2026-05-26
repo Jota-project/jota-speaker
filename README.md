@@ -1,10 +1,16 @@
 # jota-speaker
 
-TTS (Text-to-Speech) streaming microservice. Receives text tokens from an LLM over a WebSocket connection and returns raw PCM16 audio frames in real time.
+TTS (Text-to-Speech) streaming microservice powered by [Kokoro](https://github.com/hexgrad/kokoro). Exposes two server surfaces:
+
+- **WebSocket** (`/ws`) — receives LLM text tokens in real time and streams raw PCM16 audio frames back.
+- **Wyoming TCP** (port `20424`) — implements the [Wyoming protocol](https://github.com/rhasspy/wyoming) so Home Assistant can use jota-speaker as a native TTS platform.
 
 ```
-LLM token stream  →  [WebSocket]  →  jota-speaker  →  PCM16 audio frames  →  client
+LLM token stream  →  [WebSocket /ws]      →  jota-speaker  →  PCM16 audio frames  →  client
+HA assistant      →  [Wyoming TCP :20424]  →  jota-speaker  →  PCM16 audio chunks  →  HA
 ```
+
+Default voice: **ef_dora** (Spanish, female). Default language: **es**.
 
 ---
 
@@ -25,9 +31,10 @@ LLM token stream  →  [WebSocket]  →  jota-speaker  →  PCM16 audio frames  
    - [Server → Client](#server--client)
 4. [Audio format](#audio-format)
 5. [HTTP endpoints](#http-endpoints)
-6. [Configuration](#configuration)
-7. [Running with Docker](#running-with-docker)
-8. [Running tests](#running-tests)
+6. [Wyoming protocol (Home Assistant)](#wyoming-protocol-home-assistant)
+7. [Configuration](#configuration)
+8. [Running with Docker](#running-with-docker)
+9. [Running tests](#running-tests)
 
 ---
 
@@ -35,7 +42,7 @@ LLM token stream  →  [WebSocket]  →  jota-speaker  →  PCM16 audio frames  
 
 ```bash
 # Install dependencies
-pip install -r requirements.txt
+pip install .
 
 # Run with mock engine (no model files needed)
 JOTA_ENGINE=mock uvicorn src.main:app --port 8005
@@ -46,6 +53,8 @@ JOTA_KOKORO_MODEL=/models/kokoro-v1.0.int8.onnx \
 JOTA_KOKORO_VOICES=/models/voices-v1.0.bin \
 uvicorn src.main:app --host 0.0.0.0 --port 8005
 ```
+
+Wyoming server starts automatically alongside FastAPI (set `JOTA_WYOMING_ENABLED=false` to disable it).
 
 ---
 
@@ -409,6 +418,34 @@ curl http://localhost:8005/health
 
 ---
 
+## Wyoming protocol (Home Assistant)
+
+jota-speaker exposes a [Wyoming](https://github.com/rhasspy/wyoming) TCP server so Home Assistant can use it as a native TTS platform via the **Wyoming integration** — no extra add-ons required.
+
+### Setup in Home Assistant
+
+1. Go to **Settings → Devices & Services → Add Integration → Wyoming Protocol**.
+2. Enter the host/IP of the machine running jota-speaker and port `20424`.
+3. Home Assistant will discover the voice (`ef_dora`, language `es`) and add jota-speaker as a TTS provider.
+4. Assign it to your voice assistant pipeline under **Settings → Voice Assistants**.
+
+### Wyoming flow
+
+```
+HA  →  { "type": "describe" }
+       { "type": "info", "data": { "tts": [{ "name": "jota-speaker", "languages": ["es"], ... }] } }  ←  jota-speaker
+
+HA  →  { "type": "synthesize", "data": { "text": "Hola mundo" } }
+       { "type": "audio-start", "data": { "rate": 24000, "width": 2, "channels": 1 } }              ←  jota-speaker
+       { "type": "audio-chunk", "data": { ... }, payload_length: N }  +  <N bytes PCM16>             ←  jota-speaker
+       ...
+       { "type": "audio-stop", "data": { "timestamp": 0 } }                                         ←  jota-speaker
+```
+
+The Wyoming server runs on the same process as FastAPI, started in the lifespan hook and stopped on shutdown.
+
+---
+
 ## Configuration
 
 All settings use the `JOTA_` prefix and can be set via environment variables or a `.env` file.
@@ -418,16 +455,26 @@ All settings use the `JOTA_` prefix and can be set via environment variables or 
 | `JOTA_ENGINE` | `mock` | TTS engine: `mock` (silence, for tests) or `kokoro` |
 | `JOTA_KOKORO_MODEL` | `kokoro-v1.0.int8.onnx` | Path to Kokoro ONNX model file |
 | `JOTA_KOKORO_VOICES` | `voices-v1.0.bin` | Path to Kokoro voices file |
-| `JOTA_KOKORO_VOICE` | `af_heart` | Default voice |
-| `JOTA_KOKORO_LANG` | `en-us` | Default language |
+| `JOTA_KOKORO_VOICE` | `ef_dora` | Kokoro voice (see voices list below) |
+| `JOTA_KOKORO_LANG` | `es` | Kokoro language code |
 | `JOTA_SAMPLE_RATE` | `24000` | Output sample rate (Hz) |
 | `JOTA_MIN_FLUSH_CHARS` | `80` | Flush buffer to TTS after this many chars without a sentence boundary |
 | `JOTA_AUTH_PROVIDER` | `stub` | Auth backend: `stub` (accept all) or `jota_db` |
 | `JOTA_JOTA_DB_URL` | `http://localhost:8001` | jota-db base URL |
 | `JOTA_JOTA_DB_AUTH_PATH` | `/auth/validate` | jota-db validation endpoint |
 | `JOTA_JOTA_DB_TIMEOUT` | `5.0` | jota-db request timeout (seconds) |
-| `JOTA_SESSION_TIMEOUT` | `300.0` | Max session duration in seconds (0 = unlimited) |
-| `JOTA_QUEUE_MAXSIZE` | `100` | Max synthesis segments buffered per session |
+| `JOTA_SESSION_TIMEOUT` | `300.0` | Max WebSocket session duration in seconds |
+| `JOTA_QUEUE_MAXSIZE` | `100` | Max synthesis segments buffered per WebSocket session |
+| `JOTA_WYOMING_ENABLED` | `true` | Start the Wyoming TCP server |
+| `JOTA_WYOMING_PORT` | `20424` | Wyoming server port |
+
+### Available Spanish voices (Kokoro)
+
+| Voice | Style |
+|---|---|
+| `ef_dora` | Female (default) |
+| `em_alex` | Male |
+| `em_santa` | Male |
 
 See `.env.example` for a ready-to-copy template.
 
@@ -436,14 +483,20 @@ See `.env.example` for a ready-to-copy template.
 ## Running with Docker
 
 ```bash
-# Development (mock engine)
+# Development (mock engine, no models needed)
 docker compose up
 
 # Build only
 docker compose build
 ```
 
-The service listens on port `8005` by default. See `docker-compose.yml` for volume mounts and environment overrides.
+The service exposes:
+- Port `8005` — HTTP/WebSocket (FastAPI)
+- Port `20424` — Wyoming TCP (Home Assistant)
+
+Place Kokoro model files in `./models/` before starting with `JOTA_ENGINE=kokoro`:
+- `kokoro-v1.0.int8.onnx`
+- `voices-v1.0.bin`
 
 **Nginx reverse proxy** — add these headers to your `location /ws` block:
 
@@ -458,6 +511,8 @@ location /ws {
 }
 ```
 
+The Wyoming TCP port should be accessible directly (no HTTP proxy needed).
+
 ---
 
 ## Running tests
@@ -466,6 +521,6 @@ location /ws {
 python3 -m pytest -v
 ```
 
-43 tests, ~0.5 s. Uses `JOTA_ENGINE=mock` and `JOTA_AUTH_PROVIDER=stub` automatically — no model files required.
+60 tests, ~1 s. Uses `JOTA_ENGINE=mock` and `JOTA_AUTH_PROVIDER=stub` automatically — no model files required.
 
 Tests are also run automatically via GitHub Actions on every push and pull request to `main` (see `.github/workflows/test.yml`).

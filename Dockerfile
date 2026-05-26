@@ -28,11 +28,7 @@ VOLUME ["/models"]
 ENV JOTA_ENGINE=mock \
     JOTA_KOKORO_MODEL=/models/kokoro-v1.0.int8.onnx \
     JOTA_KOKORO_VOICES=/models/voices-v1.0.bin \
-    JOTA_KOKORO_VOICE=ef_dora \
-    JOTA_KOKORO_LANG=es \
-    JOTA_AUTH_PROVIDER=stub \
-    JOTA_WYOMING_ENABLED=true \
-    JOTA_WYOMING_PORT=20424
+    JOTA_AUTH_PROVIDER=stub
 
 EXPOSE 8005
 EXPOSE 20424

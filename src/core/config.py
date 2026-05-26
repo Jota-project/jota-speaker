@@ -7,8 +7,8 @@ class Settings(BaseSettings):
     engine: str = "mock"
     kokoro_model: str = "kokoro-v1.0.int8.onnx"
     kokoro_voices: str = "voices-v1.0.bin"
-    kokoro_voice: str = "af_heart"
-    kokoro_lang: str = "en-us"
+    kokoro_voice: str = "ef_dora"
+    kokoro_lang: str = "es"
     sample_rate: int = 24000
     min_flush_chars: int = 80
     auth_provider: str = "stub"
