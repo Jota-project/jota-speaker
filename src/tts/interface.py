@@ -11,3 +11,12 @@ class ITTSEngine(ABC):
     @property
     @abstractmethod
     def sample_rate(self) -> int: ...
+
+    @abstractmethod
+    async def aclose(self) -> None:
+        """Release engine resources (thread pools, native handles)."""
+        ...
+
+    # Optional: engines may set this to bound blocking inference calls.
+    # None means no timeout. The session will use this to wrap run_in_executor.
+    synthesize_timeout: float | None = None
