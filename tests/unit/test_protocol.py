@@ -100,3 +100,19 @@ def test_serialize_error():
     data = json.loads(serialize_server_message(msg))
     assert data["type"] == "error"
     assert data["code"] == "oops"
+
+
+from src.server.protocol import ChunkAbortedMessage
+
+
+def test_serialize_chunk_aborted():
+    msg = ChunkAbortedMessage(chunk_id=7)
+    data = json.loads(serialize_server_message(msg))
+    assert data["type"] == "chunk_aborted"
+    assert data["chunk_id"] == 7
+
+
+def test_parse_client_does_not_match_chunk_aborted():
+    """chunk_aborted is server→client only; clients must not send it."""
+    with pytest.raises((ValidationError, Exception)):
+        parse_client_message(json.dumps({"type": "chunk_aborted", "chunk_id": 1}))

@@ -79,6 +79,11 @@ class AudioEndMessage(BaseModel):
     chunk_id: int
 
 
+class ChunkAbortedMessage(BaseModel):
+    type: Literal["chunk_aborted"] = "chunk_aborted"
+    chunk_id: int
+
+
 class ErrorMessage(BaseModel):
     type: Literal["error"] = "error"
     code: str
@@ -90,7 +95,8 @@ class DoneMessage(BaseModel):
 
 
 ServerMessage = (
-    AuthOkMessage
+    ChunkAbortedMessage
+    | AuthOkMessage
     | AuthErrorMessage
     | AudioStartMessage
     | AudioEndMessage
