@@ -5,7 +5,7 @@ from typing import Any
 
 from fastapi.websockets import WebSocketState
 from pydantic import ValidationError
-from starlette.websockets import WebSocket
+from starlette.websockets import WebSocket, WebSocketDisconnect
 
 from src.auth.interface import IAuthProvider
 from src.core.logger import get_logger
@@ -16,6 +16,7 @@ from .protocol import (
     AudioStartMessage,
     AuthErrorMessage,
     AuthOkMessage,
+    ChunkAbortedMessage,
     DoneMessage,
     EndMessage,
     ErrorMessage,
@@ -165,10 +166,16 @@ class SpeakerSession:
                 sample_rate=self._engine.sample_rate,
             )
         )
-        async for frame in self._engine.synthesize(text):
-            if self._ws.client_state != WebSocketState.CONNECTED:
-                return
-            await self._ws.send_bytes(frame)
+        try:
+            async for frame in self._engine.synthesize(text):
+                try:
+                    await self._ws.send_bytes(frame)
+                except WebSocketDisconnect:
+                    await self._send(ChunkAbortedMessage(chunk_id=chunk_id))
+                    return
+        except WebSocketDisconnect:
+            await self._send(ChunkAbortedMessage(chunk_id=chunk_id))
+            return
 
         await self._send(AudioEndMessage(chunk_id=chunk_id))
 
