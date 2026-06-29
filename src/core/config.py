@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     kokoro_voices: str = "voices-v1.0.bin"
     kokoro_voice: str = "ef_dora"
     kokoro_lang: str = "es"
+    kokoro_synthesize_timeout: float | None = None
     sample_rate: int = 24000
     min_flush_chars: int = 80
     auth_provider: str = "stub"

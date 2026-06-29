@@ -3,6 +3,7 @@ import pytest
 
 from src.tts.interface import ITTSEngine
 from src.tts.mock_engine import MockEngine
+from src.core.config import Settings
 
 
 def test_ittsengine_requires_aclose():
@@ -50,3 +51,14 @@ async def test_mock_engine_aclose_is_idempotent():
     eng = MockEngine()
     await eng.aclose()
     await eng.aclose()  # no debe lanzar
+
+
+def test_settings_has_kokoro_synthesize_timeout_default_none():
+    s = Settings(_env_file=None)
+    assert s.kokoro_synthesize_timeout is None
+
+
+def test_settings_kokoro_synthesize_timeout_from_env(monkeypatch):
+    monkeypatch.setenv("JOTA_KOKORO_SYNTHESIZE_TIMEOUT", "2.5")
+    s = Settings(_env_file=None)
+    assert s.kokoro_synthesize_timeout == 2.5

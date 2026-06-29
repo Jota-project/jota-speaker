@@ -36,6 +36,10 @@ async def lifespan(app: FastAPI):
         await app.state.wyoming_server.stop()
 
     logger.info("Shutting down jota-speaker")
+    try:
+        await app.state.engine.aclose()
+    except Exception as exc:
+        logger.warning("Engine aclose on shutdown failed: %s", exc)
 
 
 app = FastAPI(title="jota-speaker", lifespan=lifespan)
