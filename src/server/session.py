@@ -71,12 +71,20 @@ class SpeakerSession:
         except asyncio.TimeoutError:
             self._log.warning("Session timeout after %.0fs", self._session_timeout)
             await self._send(ErrorMessage(code="session_timeout", message="Session timed out"))
-            self._tts_task.cancel()
+            if self._tts_task and not self._tts_task.done():
+                self._tts_task.cancel()
         finally:
+            if self._tts_task is not None:
+                try:
+                    await self._tts_task
+                except asyncio.CancelledError:
+                    pass
+                except Exception as exc:
+                    self._log.warning("TTS worker ended with error: %s", exc)
             try:
-                await self._tts_task
-            except asyncio.CancelledError:
-                pass
+                await self._engine.aclose()
+            except Exception as exc:
+                self._log.warning("Engine aclose failed: %s", exc)
         self._log.info("Session ended")
 
     # ── authentication ────────────────────────────────────────────────────────
@@ -205,8 +213,12 @@ class SpeakerSession:
         except asyncio.QueueFull:
             self._log.error("Synthesis queue full — aborting session")
             await self._send(ErrorMessage(code="queue_full", message="Synthesis queue full"))
-            if self._tts_task:
+            if self._tts_task and not self._tts_task.done():
                 self._tts_task.cancel()
+                try:
+                    await self._tts_task
+                except (asyncio.CancelledError, Exception):
+                    pass
             return False
 
     async def _send(self, msg: Any) -> None:
