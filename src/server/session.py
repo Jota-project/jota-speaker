@@ -147,15 +147,31 @@ class SpeakerSession:
     # ── TTS worker ────────────────────────────────────────────────────────────
 
     async def _tts_worker(self) -> None:
-        while True:
-            item = await self._queue.get()
-            if item is _SENTINEL:
-                break
-            assert isinstance(item, str)
-            await self._synthesize_segment(item)
-
-        if self._ws.client_state == WebSocketState.CONNECTED:
-            await self._send(DoneMessage())
+        try:
+            while True:
+                item = await self._queue.get()
+                if item is _SENTINEL:
+                    break
+                assert isinstance(item, str)
+                try:
+                    await self._synthesize_segment(item)
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:
+                    self._log.error("Synthesis failed: %s", exc, exc_info=True)
+                    await self._send(
+                        ErrorMessage(
+                            code="synthesis_error",
+                            message=f"TTS engine error: {exc}",
+                        )
+                    )
+                    break
+        finally:
+            if self._ws.client_state == WebSocketState.CONNECTED:
+                try:
+                    await self._send(DoneMessage())
+                except Exception:
+                    pass
 
     async def _synthesize_segment(self, text: str) -> None:
         chunk_id = self._chunk_counter
