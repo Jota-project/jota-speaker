@@ -12,6 +12,8 @@ _FRAMES_PER_CHAR = 1  # emit 1 frame per character so tests get audible output
 class MockEngine(ITTSEngine):
     """Generates silence PCM16 frames. Used for dev/CI."""
 
+    synthesize_timeout: float | None = None  # mock never blocks → no timeout needed
+
     def __init__(self, sample_rate: int = 24000) -> None:
         self._sample_rate = sample_rate
 
@@ -24,3 +26,7 @@ class MockEngine(ITTSEngine):
         for _ in range(frames):
             await asyncio.sleep(0)  # yield control
             yield _SILENCE_FRAME
+
+    async def aclose(self) -> None:
+        # No-op: MockEngine holds no native resources.
+        return None
