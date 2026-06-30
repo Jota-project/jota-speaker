@@ -681,10 +681,6 @@ Y añadir los métodos al final de la clase:
         def _to_words(m: re.Match) -> str:
             full = m.group(0)
             local, _, domain = full.partition("@")
-            local_clean = re.sub(r"[._-]", " ", local)
-            domain_parts = re.split(r"[._-]", domain.split("@")[0])
-            domain_str = " punto ".join(domain_parts[:-1] + [domain_parts[-1].split(".")[-1]])
-            # Simpler approach: split by @ and . for both halves.
             local_words = re.split(r"[._+-]", local)
             domain_words = re.split(r"[._-]", domain)
             return " ".join(w for w in local_words if w) + " arroba " + " ".join(
