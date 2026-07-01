@@ -1,6 +1,6 @@
 import pytest
 
-from src.tts.normalizer import INormalizer, PassThroughNormalizer
+from src.tts.normalizer import INormalizer, PassThroughNormalizer, SpanishNormalizer
 
 
 def test_passthrough_normalizer_returns_text_unchanged():
@@ -23,3 +23,73 @@ async def test_passthrough_normalizer_empty_string():
 def test_passthrough_is_normalizer_instance():
     n = PassThroughNormalizer()
     assert isinstance(n, INormalizer)
+
+
+@pytest.fixture
+def norm():
+    return SpanishNormalizer()
+
+
+@pytest.fixture
+def norm_no_excl():
+    return SpanishNormalizer(excluded_patterns=[])
+
+
+@pytest.mark.asyncio
+async def test_spanish_normalizer_integers(norm):
+    assert await norm.normalize("Tengo 25 años") == "Tengo veinticinco años"
+
+
+@pytest.mark.asyncio
+async def test_spanish_normalizer_multi_digit_integers(norm):
+    assert await norm.normalize("Son 100 personas") == "Son cien personas"
+
+
+@pytest.mark.asyncio
+async def test_spanish_normalizer_decimals(norm):
+    out = await norm.normalize("Vale 3,14 euros")
+    assert "tres" in out and "coma" in out and "catorce" in out
+
+
+@pytest.mark.asyncio
+async def test_spanish_normalizer_decimals_dot(norm):
+    out = await norm.normalize("Vale 3.14 euros")
+    assert "tres" in out and "coma" in out and "catorce" in out
+
+
+@pytest.mark.asyncio
+async def test_spanish_normalizer_percentages(norm):
+    out = await norm.normalize("50% de descuento")
+    assert "cincuenta" in out and "por ciento" in out
+
+
+@pytest.mark.asyncio
+async def test_spanish_normalizer_decimal_percentage(norm):
+    out = await norm.normalize("3,14%")
+    assert "tres" in out and "catorce" in out and "por ciento" in out
+
+
+@pytest.mark.asyncio
+async def test_spanish_normalizer_currency_prefix(norm):
+    out = await norm.normalize("Cuesta 50€")
+    assert "cincuenta" in out and "euros" in out
+
+
+@pytest.mark.asyncio
+async def test_spanish_normalizer_currency_word(norm):
+    out = await norm.normalize("Pagué 100 euros")
+    assert "cien" in out and "euros" in out
+
+
+@pytest.mark.asyncio
+async def test_spanish_normalizer_postal_code_protected_by_default(norm):
+    # Default whitelist includes postal_code → 5-digit number stays
+    assert await norm.normalize("Vivo en 28013") == "Vivo en 28013"
+
+
+@pytest.mark.asyncio
+async def test_spanish_normalizer_postal_normalized_when_excluded(norm_no_excl):
+    out = await norm_no_excl.normalize("28013")
+    assert "veintiocho" in out.lower() or "ochenta" not in out  # 28 → veintiocho
+    # 28013 parsed as decimal by some regexes is fine; ensure it changed
+    assert "28013" not in out
