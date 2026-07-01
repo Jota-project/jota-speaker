@@ -120,3 +120,48 @@ async def test_spanish_normalizer_dates_dash(norm):
     out = await norm.normalize("Fecha 01-12-1999")
     assert "diciembre" in out
     assert "mil novecientos noventa y nueve" in out
+
+
+@pytest.mark.asyncio
+async def test_spanish_normalizer_abbreviations_dr(norm):
+    assert "doctor" in (await norm.normalize("Soy Dr. García")).lower()
+
+
+@pytest.mark.asyncio
+async def test_spanish_normalizer_etcetera(norm):
+    assert "etcétera" in (await norm.normalize("Perros, gatos, etc.")).lower()
+
+
+@pytest.mark.asyncio
+async def test_spanish_normalizer_url_not_touched_by_default(norm):
+    out = await norm.normalize("Ver https://ejemplo.com aquí")
+    assert "https://ejemplo.com" in out
+
+
+@pytest.mark.asyncio
+async def test_spanish_normalizer_email_spoken_when_not_excluded():
+    n = SpanishNormalizer(excluded_patterns=[])
+    out = await n.normalize("Escribe a foo@bar.com")
+    assert "foo" in out and "bar" in out and "arroba" in out
+
+
+@pytest.mark.asyncio
+async def test_spanish_normalizer_email_not_touched_by_default(norm):
+    assert "foo@bar.com" in (await norm.normalize("Escribe a foo@bar.com"))
+
+
+@pytest.mark.asyncio
+async def test_spanish_normalizer_hashtag(norm):
+    out = await norm.normalize("Me encanta #verano")
+    assert "hashtag" in out.lower()
+
+
+@pytest.mark.asyncio
+async def test_spanish_normalizer_mention(norm):
+    out = await norm.normalize("Follow @usuario")
+    assert "arroba" in out.lower()
+
+
+@pytest.mark.asyncio
+async def test_spanish_normalizer_ampersand(norm):
+    assert await norm.normalize("A & B") == "A y B"
