@@ -165,3 +165,21 @@ async def test_spanish_normalizer_mention(norm):
 @pytest.mark.asyncio
 async def test_spanish_normalizer_ampersand(norm):
     assert await norm.normalize("A & B") == "A y B"
+
+
+import time
+
+
+@pytest.mark.asyncio
+async def test_normalizer_latency_under_100ms(norm):
+    long_text = (
+        "Tengo 25 años, son las 15:30 y vivo en Madrid. "
+        "Hoy es 15/03/2024 y Dr. García me cobra 100€ por la consulta. "
+        "El descuento es del 50% y el código es 28013. Repito: "
+    ) * 2
+    await norm.normalize(long_text[:100])
+    t0 = time.monotonic()
+    for _ in range(20):
+        await norm.normalize(long_text)
+    elapsed_ms = (time.monotonic() - t0) * 1000 / 20
+    assert elapsed_ms < 100, f"avg per-call latency {elapsed_ms:.1f}ms exceeds 100ms"
