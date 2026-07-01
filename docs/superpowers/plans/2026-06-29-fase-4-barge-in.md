@@ -464,19 +464,6 @@ def _setup(engine: ITTSEngine, **kwargs) -> TestClient:
     return TestClient(app)
 
 
-def _drain_until_type(client, want: set[str], max_iters: int = 100) -> list[dict]:
-    """Read messages until we get any of the wanted types."""
-    msgs: list[dict] = []
-    seen_types: set[str] = set()
-    for _ in range(max_iters):
-        try:
-            data = client.receive() if False else None  # placeholder
-        except Exception:
-            break
-        break  # unreachable, replaced below
-    return msgs
-
-
 def test_interrupt_during_synthesis_sends_aborted_and_interrupted():
     engine = SlowFrameEngine()
     client = _setup(engine)
