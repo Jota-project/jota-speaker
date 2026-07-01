@@ -60,6 +60,8 @@ class SpeakerSession:
         self._tts_task: asyncio.Task | None = None
         self._id = uuid.uuid4().hex[:8]
         self._log = _SidAdapter(_base_logger, {"sid": self._id})
+        self._current_chunk_id: int | None = None
+        self._interrupt_lock: bool = False
 
     # ── public entry point ────────────────────────────────────────────────────
 
