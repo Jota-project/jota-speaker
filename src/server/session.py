@@ -22,6 +22,8 @@ from .protocol import (
     EndMessage,
     ErrorMessage,
     FlushMessage,
+    InterruptedMessage,
+    InterruptMessage,
     TokenMessage,
     parse_client_message,
     serialize_server_message,
@@ -153,6 +155,15 @@ class SpeakerSession:
                     await self._queue.put(_SENTINEL)
                     return
 
+                elif isinstance(msg, InterruptMessage):
+                    if self._interrupt_lock:
+                        continue
+                    self._interrupt_lock = True
+                    try:
+                        await self._handle_interrupt()
+                    finally:
+                        self._interrupt_lock = False
+
         except Exception as exc:
             self._log.warning("Receive loop ended: %s", exc)
             await self._queue.put(_SENTINEL)
@@ -219,6 +230,45 @@ class SpeakerSession:
             await self._send(AudioEndMessage(chunk_id=chunk_id))
         finally:
             self._current_chunk_id = None
+
+    async def _handle_interrupt(self) -> None:
+        aborted_id = self._current_chunk_id
+        # Cancel worker (will raise CancelledError inside _synthesize_segment).
+        if self._tts_task is not None and not self._tts_task.done():
+            self._tts_task.cancel()
+            try:
+                await self._tts_task
+            except asyncio.CancelledError:
+                pass
+            except Exception as exc:
+                self._log.warning("Worker ended with error during interrupt: %s", exc)
+        # Drain queue (discard pending segments).
+        drained = 0
+        while not self._queue.empty():
+            try:
+                self._queue.get_nowait()
+                drained += 1
+            except asyncio.QueueEmpty:
+                break
+        # Reset accumulator (discard unflushed buffer).
+        try:
+            self._accumulator.flush()
+        except Exception:
+            pass
+        # Restart worker so subsequent tokens can be processed.
+        self._tts_task = asyncio.create_task(self._tts_worker())
+        # Notify client: chunk_aborted first (so client knows what to discard),
+        # then interrupted as the barge-in confirmation.
+        if aborted_id is not None:
+            try:
+                await self._send(ChunkAbortedMessage(chunk_id=aborted_id))
+            except Exception:
+                pass
+        try:
+            await self._send(InterruptedMessage(chunk_id=aborted_id or 0))
+        except Exception:
+            pass
+        self._log.info("Barge-in processed (aborted_id=%s, drained=%d)", aborted_id, drained)
 
     # ── helpers ───────────────────────────────────────────────────────────────
 
