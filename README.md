@@ -1,3 +1,11 @@
+![Status: Maintained](https://img.shields.io/badge/status-Maintained-2ea44f)
+
+> **Role in Jota ecosystem:** TTS streaming microservice. WebSocket receives LLM tokens and emits PCM16 audio; Wyoming TCP (port 20424) lets Home Assistant use it as native TTS. The gateway `jota-gateway` connects to this service per voice session.
+>
+> Part of [Jota-project](https://github.com/Jota-project). See [`ARCHITECTURE.md`](https://github.com/Jota-project/.github/blob/main/ARCHITECTURE.md) for the full system map.
+
+---
+
 # jota-speaker
 
 TTS (Text-to-Speech) streaming microservice powered by [Kokoro](https://github.com/hexgrad/kokoro). Exposes two server surfaces:
@@ -31,10 +39,11 @@ Default voice: **ef_dora** (Spanish, female). Default language: **es**.
    - [Server → Client](#server--client)
 4. [Audio format](#audio-format)
 5. [HTTP endpoints](#http-endpoints)
-6. [Wyoming protocol (Home Assistant)](#wyoming-protocol-home-assistant)
-7. [Configuration](#configuration)
+6. [Configuration](#configuration)
+7. [Wyoming protocol (Home Assistant)](#wyoming-protocol-home-assistant)
 8. [Running with Docker](#running-with-docker)
 9. [Running tests](#running-tests)
+10. [Status & roadmap](#status--roadmap)
 
 ---
 
@@ -418,34 +427,6 @@ curl http://localhost:8005/health
 
 ---
 
-## Wyoming protocol (Home Assistant)
-
-jota-speaker exposes a [Wyoming](https://github.com/rhasspy/wyoming) TCP server so Home Assistant can use it as a native TTS platform via the **Wyoming integration** — no extra add-ons required.
-
-### Setup in Home Assistant
-
-1. Go to **Settings → Devices & Services → Add Integration → Wyoming Protocol**.
-2. Enter the host/IP of the machine running jota-speaker and port `20424`.
-3. Home Assistant will discover the voice (`ef_dora`, language `es`) and add jota-speaker as a TTS provider.
-4. Assign it to your voice assistant pipeline under **Settings → Voice Assistants**.
-
-### Wyoming flow
-
-```
-HA  →  { "type": "describe" }
-       { "type": "info", "data": { "tts": [{ "name": "jota-speaker", "languages": ["es"], ... }] } }  ←  jota-speaker
-
-HA  →  { "type": "synthesize", "data": { "text": "Hola mundo" } }
-       { "type": "audio-start", "data": { "rate": 24000, "width": 2, "channels": 1 } }              ←  jota-speaker
-       { "type": "audio-chunk", "data": { ... }, payload_length: N }  +  <N bytes PCM16>             ←  jota-speaker
-       ...
-       { "type": "audio-stop", "data": { "timestamp": 0 } }                                         ←  jota-speaker
-```
-
-The Wyoming server runs on the same process as FastAPI, started in the lifespan hook and stopped on shutdown.
-
----
-
 ## Configuration
 
 All settings use the `JOTA_` prefix and can be set via environment variables or a `.env` file.
@@ -477,6 +458,36 @@ All settings use the `JOTA_` prefix and can be set via environment variables or 
 | `em_santa` | Male |
 
 See `.env.example` for a ready-to-copy template.
+
+---
+
+## Wyoming protocol (Home Assistant)
+
+> **Why this matters:** if you're integrating Jota with Home Assistant, this is the path you'll use. Wyoming is the protocol HA's voice pipeline speaks natively. jota-speaker implements both the WebSocket surface (for the gateway) and the Wyoming TCP surface (for HA) from a single process — no extra service needed.
+
+jota-speaker exposes a [Wyoming](https://github.com/rhasspy/wyoming) TCP server so Home Assistant can use it as a native TTS platform via the **Wyoming integration** — no extra add-ons required.
+
+### Setup in Home Assistant
+
+1. Go to **Settings → Devices & Services → Add Integration → Wyoming Protocol**.
+2. Enter the host/IP of the machine running jota-speaker and port `20424`.
+3. Home Assistant will discover the voice (`ef_dora`, language `es`) and add jota-speaker as a TTS provider.
+4. Assign it to your voice assistant pipeline under **Settings → Voice Assistants**.
+
+### Wyoming flow
+
+```
+HA  →  { "type": "describe" }
+       { "type": "info", "data": { "tts": [{ "name": "jota-speaker", "languages": ["es"], ... }] } }  ←  jota-speaker
+
+HA  →  { "type": "synthesize", "data": { "text": "Hola mundo" } }
+       { "type": "audio-start", "data": { "rate": 24000, "width": 2, "channels": 1 } }              ←  jota-speaker
+       { "type": "audio-chunk", "data": { ... }, payload_length: N }  +  <N bytes PCM16>             ←  jota-speaker
+       ...
+       { "type": "audio-stop", "data": { "timestamp": 0 } }                                         ←  jota-speaker
+```
+
+The Wyoming server runs on the same process as FastAPI, started in the lifespan hook and stopped on shutdown.
 
 ---
 
@@ -524,3 +535,13 @@ python3 -m pytest -v
 60 tests, ~1 s. Uses `JOTA_ENGINE=mock` and `JOTA_AUTH_PROVIDER=stub` automatically — no model files required.
 
 Tests are also run automatically via GitHub Actions on every push and pull request to `main` (see `.github/workflows/test.yml`).
+
+---
+
+## Status & roadmap
+
+- **Status:** Maintained. Most recent work added Wyoming protocol support (PR landed 2026-05-21).
+- **Default voice:** `ef_dora` (Spanish, female). Configurable via `JOTA_KOKORO_VOICE`.
+- **Active directions:**
+  - Auth migration: planning to move from `jota-db` external auth to per-service `TTS_TOKEN` (tracked in [`Jota-project/jota-gateway` issue tracker](https://github.com/Jota-project/jota-gateway/issues)).
+  - Wyoming: protocol coverage for HA discoverability is complete; expect incremental fixes as HA updates.
