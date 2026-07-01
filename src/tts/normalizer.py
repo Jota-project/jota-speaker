@@ -63,12 +63,16 @@ class SpanishNormalizer(INormalizer):
         self._re_percent = re.compile(r"(\d+(?:[.,]\d+)?)\s*%")
         self._re_currency = re.compile(r"(\d{1,15}(?:[.,]\d+)?)\s*(?:€|euros?|EUR)")
         self._re_currency_prefix = re.compile(r"€\s*(\d{1,15}(?:[.,]\d+)?)")
+        self._re_time = re.compile(r"\b(\d{1,2}):(\d{2})\s*(am|pm|AM|PM)?\b")
+        self._re_date = re.compile(r"\b(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})\b")
 
     async def normalize(self, text: str) -> str:
         try:
             t = text
             if "postal_code" in self.excluded:
                 t = re.sub(r"(?<![\w.,])(\d{5})(?![\w.])", r"__POSTAL_\1__", t)
+            t = self._apply_dates(t)
+            t = self._apply_times(t)
             t = self._apply_percentages(t)
             t = self._apply_decimals(t)
             t = self._apply_currency(t)
@@ -139,3 +143,50 @@ class SpanishNormalizer(INormalizer):
             return f"{w} euros"
         t = self._re_currency_prefix.sub(_prefix_to_words, t)
         return t
+
+    def _apply_times(self, t: str) -> str:
+        def _to_words(m: re.Match) -> str:
+            hh, mm, meridiem = m.group(1), m.group(2), (m.group(3) or "").lower()
+            try:
+                h_int = int(hh)
+                m_int = int(mm)
+            except ValueError:
+                return m.group(0)
+            if self.hour_format == "12h" and meridiem in ("am", "pm"):
+                period = "de la mañana" if meridiem == "am" else "de la tarde"
+                if m_int == 0:
+                    spoken = f"las {num2words(h_int, lang='es')} en punto {period}"
+                elif m_int == 30:
+                    spoken = f"las {num2words(h_int, lang='es')} y media {period}"
+                else:
+                    spoken = (
+                        f"las {num2words(h_int, lang='es')} "
+                        f"y {num2words(m_int, lang='es')} {period}"
+                    )
+                return spoken
+            if m_int == 0:
+                base = num2words(h_int, lang="es")
+                return f"las {base} en punto"
+            base = num2words(h_int, lang="es")
+            mm_w = num2words(m_int, lang="es")
+            return f"las {base} {mm_w}"
+        try:
+            return self._re_time.sub(_to_words, t)
+        except Exception:
+            return t
+
+    def _apply_dates(self, t: str) -> str:
+        def _to_words(m: re.Match) -> str:
+            day, month, year = m.group(1), m.group(2), m.group(3)
+            month_name = _MONTHS_ES.get(month.zfill(2), month)
+            try:
+                d_w = num2words(int(day), lang="es")
+                y_int = int(year) if len(year) == 4 else 2000 + int(year)
+                y_w = num2words(y_int, lang="es")
+            except Exception:
+                return m.group(0)
+            return f"el {d_w} de {month_name} de {y_w}"
+        try:
+            return self._re_date.sub(_to_words, t)
+        except Exception:
+            return t

@@ -93,3 +93,30 @@ async def test_spanish_normalizer_postal_normalized_when_excluded(norm_no_excl):
     assert "veintiocho" in out.lower() or "ochenta" not in out  # 28 → veintiocho
     # 28013 parsed as decimal by some regexes is fine; ensure it changed
     assert "28013" not in out
+
+
+@pytest.mark.asyncio
+async def test_spanish_normalizer_hours_24h(norm):
+    out = await norm.normalize("Son las 15:30")
+    assert "quince" in out and "treinta" in out
+
+
+@pytest.mark.asyncio
+async def test_spanish_normalizer_hours_midnight(norm):
+    out = await norm.normalize("A las 9:00")
+    assert "nueve" in out
+
+
+@pytest.mark.asyncio
+async def test_spanish_normalizer_dates(norm):
+    out = await norm.normalize("Nací el 15/03/2024")
+    assert "quince" in out
+    assert "marzo" in out
+    assert "dos mil veinticuatro" in out
+
+
+@pytest.mark.asyncio
+async def test_spanish_normalizer_dates_dash(norm):
+    out = await norm.normalize("Fecha 01-12-1999")
+    assert "diciembre" in out
+    assert "mil novecientos noventa y nueve" in out
