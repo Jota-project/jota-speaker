@@ -195,21 +195,19 @@ class SpanishNormalizer(INormalizer):
             if self.hour_format == "12h" and meridiem in ("am", "pm"):
                 period = "de la mañana" if meridiem == "am" else "de la tarde"
                 if m_int == 0:
-                    spoken = f"las {num2words(h_int, lang='es')} en punto {period}"
-                elif m_int == 30:
-                    spoken = f"las {num2words(h_int, lang='es')} y media {period}"
-                else:
-                    spoken = (
-                        f"las {num2words(h_int, lang='es')} "
-                        f"y {num2words(m_int, lang='es')} {period}"
-                    )
-                return spoken
+                    return f"{num2words(h_int, lang='es')} en punto {period}"
+                if m_int == 30:
+                    return f"{num2words(h_int, lang='es')} y media {period}"
+                return (
+                    f"{num2words(h_int, lang='es')} "
+                    f"y {num2words(m_int, lang='es')} {period}"
+                )
             if m_int == 0:
                 base = num2words(h_int, lang="es")
-                return f"las {base} en punto"
+                return f"{base} en punto"
             base = num2words(h_int, lang="es")
             mm_w = num2words(m_int, lang="es")
-            return f"las {base} {mm_w}"
+            return f"{base} y {mm_w}"
         try:
             return self._re_time.sub(_to_words, t)
         except Exception:
