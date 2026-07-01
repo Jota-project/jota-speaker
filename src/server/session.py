@@ -189,30 +189,36 @@ class SpeakerSession:
     async def _synthesize_segment(self, text: str) -> None:
         chunk_id = self._chunk_counter
         self._chunk_counter += 1
-        await self._send(
-            AudioStartMessage(
-                chunk_id=chunk_id,
-                sample_rate=self._engine.sample_rate,
+        self._current_chunk_id = chunk_id
+        try:
+            await self._send(
+                AudioStartMessage(
+                    chunk_id=chunk_id,
+                    sample_rate=self._engine.sample_rate,
+                )
             )
-        )
-        # Normalize BEFORE synthesis (best-effort: never raises session).
-        try:
-            normalized = await self._normalizer.normalize(text)
-        except Exception as exc:
-            self._log.warning("Normalizer raised, using original text: %s", exc)
-            normalized = text
-        try:
-            async for frame in self._engine.synthesize(normalized):
-                try:
-                    await self._ws.send_bytes(frame)
-                except WebSocketDisconnect:
-                    await self._send(ChunkAbortedMessage(chunk_id=chunk_id))
-                    return
-        except WebSocketDisconnect:
-            await self._send(ChunkAbortedMessage(chunk_id=chunk_id))
-            return
-
-        await self._send(AudioEndMessage(chunk_id=chunk_id))
+            # Normalize BEFORE synthesis (best-effort: never raises session).
+            try:
+                normalized = await self._normalizer.normalize(text)
+            except Exception as exc:
+                self._log.warning("Normalizer raised, using original text: %s", exc)
+                normalized = text
+            try:
+                async for frame in self._engine.synthesize(normalized):
+                    try:
+                        await self._ws.send_bytes(frame)
+                    except WebSocketDisconnect:
+                        await self._send(ChunkAbortedMessage(chunk_id=chunk_id))
+                        return
+            except asyncio.CancelledError:
+                # Barge-in in progress: _handle_interrupt will read _current_chunk_id.
+                raise
+            except WebSocketDisconnect:
+                await self._send(ChunkAbortedMessage(chunk_id=chunk_id))
+                return
+            await self._send(AudioEndMessage(chunk_id=chunk_id))
+        finally:
+            self._current_chunk_id = None
 
     # ── helpers ───────────────────────────────────────────────────────────────
 
