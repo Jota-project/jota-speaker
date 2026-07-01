@@ -6,6 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.auth.stub import StubAuthProvider
+from src.core.normalizer_factory import create_normalizer
 from src.core.config import Settings
 from src.main import app
 from src.tts.interface import ITTSEngine
@@ -37,6 +38,7 @@ def _make_client(engine: ITTSEngine) -> TestClient:
     app.state.settings = settings
     app.state.engine = engine
     app.state.auth = StubAuthProvider()
+    app.state.normalizer = create_normalizer(settings)
     return TestClient(app)
 
 

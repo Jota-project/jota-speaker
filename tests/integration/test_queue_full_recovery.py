@@ -3,6 +3,7 @@ import json
 from fastapi.testclient import TestClient
 
 from src.auth.stub import StubAuthProvider
+from src.core.normalizer_factory import create_normalizer
 from src.core.config import Settings
 from src.core.engine_factory import create_engine
 from src.main import app
@@ -18,6 +19,7 @@ def test_queue_full_emits_single_error_no_double_done():
     app.state.settings = settings
     app.state.engine = create_engine(settings)
     app.state.auth = StubAuthProvider()
+    app.state.normalizer = create_normalizer(settings)
 
     client = TestClient(app)
     with client.websocket_connect("/ws") as ws:

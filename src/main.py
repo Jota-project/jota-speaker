@@ -6,6 +6,7 @@ from src.auth import create_auth_provider
 from src.core.config import Settings, get_settings
 from src.core.engine_factory import create_engine
 from src.core.logger import get_logger
+from src.core.normalizer_factory import create_normalizer
 
 logger = get_logger(__name__)
 
@@ -30,6 +31,7 @@ async def lifespan(app: FastAPI):
         await wyoming.start()
         app.state.wyoming_server = wyoming
 
+    app.state.normalizer = create_normalizer(settings)
     yield
 
     if hasattr(app.state, "wyoming_server"):

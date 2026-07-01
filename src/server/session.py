@@ -10,6 +10,7 @@ from starlette.websockets import WebSocket, WebSocketDisconnect
 from src.auth.interface import IAuthProvider
 from src.core.logger import get_logger
 from src.tts.interface import ITTSEngine
+from src.tts.normalizer import INormalizer
 from .accumulator import TokenAccumulator
 from .protocol import (
     AudioEndMessage,
@@ -43,6 +44,7 @@ class SpeakerSession:
         ws: WebSocket,
         engine: ITTSEngine,
         auth: IAuthProvider,
+        normalizer: INormalizer,
         min_flush_chars: int = 80,
         queue_maxsize: int = 100,
         session_timeout: float = 300.0,
@@ -50,6 +52,7 @@ class SpeakerSession:
         self._ws = ws
         self._engine = engine
         self._auth = auth
+        self._normalizer = normalizer
         self._accumulator = TokenAccumulator(min_flush_chars=min_flush_chars)
         self._queue: asyncio.Queue[str | object] = asyncio.Queue(maxsize=queue_maxsize)
         self._chunk_counter = 0
@@ -190,8 +193,10 @@ class SpeakerSession:
                 sample_rate=self._engine.sample_rate,
             )
         )
+        # Normalize BEFORE synthesis (best-effort: never raises).
+        normalized = await self._normalizer.normalize(text)
         try:
-            async for frame in self._engine.synthesize(text):
+            async for frame in self._engine.synthesize(normalized):
                 try:
                     await self._ws.send_bytes(frame)
                 except WebSocketDisconnect:
