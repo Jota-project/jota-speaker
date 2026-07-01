@@ -193,8 +193,12 @@ class SpeakerSession:
                 sample_rate=self._engine.sample_rate,
             )
         )
-        # Normalize BEFORE synthesis (best-effort: never raises).
-        normalized = await self._normalizer.normalize(text)
+        # Normalize BEFORE synthesis (best-effort: never raises session).
+        try:
+            normalized = await self._normalizer.normalize(text)
+        except Exception as exc:
+            self._log.warning("Normalizer raised, using original text: %s", exc)
+            normalized = text
         try:
             async for frame in self._engine.synthesize(normalized):
                 try:
