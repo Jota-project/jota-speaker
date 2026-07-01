@@ -10,6 +10,9 @@ class Settings(BaseSettings):
     kokoro_voice: str = "ef_dora"
     kokoro_lang: str = "es"
     kokoro_synthesize_timeout: float | None = None
+    normalizer: str = "spanish"
+    normalizer_excluded_patterns: list[str] = ["postal_code", "hash", "url", "email"]
+    hour_format: str = "24h"
     sample_rate: int = 24000
     min_flush_chars: int = 80
     auth_provider: str = "stub"
