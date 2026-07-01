@@ -5,17 +5,19 @@ from typing import Any
 
 from fastapi.websockets import WebSocketState
 from pydantic import ValidationError
-from starlette.websockets import WebSocket
+from starlette.websockets import WebSocket, WebSocketDisconnect
 
 from src.auth.interface import IAuthProvider
 from src.core.logger import get_logger
 from src.tts.interface import ITTSEngine
+from src.tts.normalizer import INormalizer
 from .accumulator import TokenAccumulator
 from .protocol import (
     AudioEndMessage,
     AudioStartMessage,
     AuthErrorMessage,
     AuthOkMessage,
+    ChunkAbortedMessage,
     DoneMessage,
     EndMessage,
     ErrorMessage,
@@ -42,6 +44,7 @@ class SpeakerSession:
         ws: WebSocket,
         engine: ITTSEngine,
         auth: IAuthProvider,
+        normalizer: INormalizer,
         min_flush_chars: int = 80,
         queue_maxsize: int = 100,
         session_timeout: float = 300.0,
@@ -49,6 +52,7 @@ class SpeakerSession:
         self._ws = ws
         self._engine = engine
         self._auth = auth
+        self._normalizer = normalizer
         self._accumulator = TokenAccumulator(min_flush_chars=min_flush_chars)
         self._queue: asyncio.Queue[str | object] = asyncio.Queue(maxsize=queue_maxsize)
         self._chunk_counter = 0
@@ -70,12 +74,20 @@ class SpeakerSession:
         except asyncio.TimeoutError:
             self._log.warning("Session timeout after %.0fs", self._session_timeout)
             await self._send(ErrorMessage(code="session_timeout", message="Session timed out"))
-            self._tts_task.cancel()
+            if self._tts_task and not self._tts_task.done():
+                self._tts_task.cancel()
         finally:
+            if self._tts_task is not None:
+                try:
+                    await self._tts_task
+                except asyncio.CancelledError:
+                    pass
+                except Exception as exc:
+                    self._log.warning("TTS worker ended with error: %s", exc)
             try:
-                await self._tts_task
-            except asyncio.CancelledError:
-                pass
+                await self._engine.aclose()
+            except Exception as exc:
+                self._log.warning("Engine aclose failed: %s", exc)
         self._log.info("Session ended")
 
     # ── authentication ────────────────────────────────────────────────────────
@@ -146,15 +158,31 @@ class SpeakerSession:
     # ── TTS worker ────────────────────────────────────────────────────────────
 
     async def _tts_worker(self) -> None:
-        while True:
-            item = await self._queue.get()
-            if item is _SENTINEL:
-                break
-            assert isinstance(item, str)
-            await self._synthesize_segment(item)
-
-        if self._ws.client_state == WebSocketState.CONNECTED:
-            await self._send(DoneMessage())
+        try:
+            while True:
+                item = await self._queue.get()
+                if item is _SENTINEL:
+                    break
+                assert isinstance(item, str)
+                try:
+                    await self._synthesize_segment(item)
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:
+                    self._log.error("Synthesis failed: %s", exc, exc_info=True)
+                    await self._send(
+                        ErrorMessage(
+                            code="synthesis_error",
+                            message=f"TTS engine error: {exc}",
+                        )
+                    )
+                    break
+        finally:
+            if self._ws.client_state == WebSocketState.CONNECTED:
+                try:
+                    await self._send(DoneMessage())
+                except Exception:
+                    pass
 
     async def _synthesize_segment(self, text: str) -> None:
         chunk_id = self._chunk_counter
@@ -165,10 +193,22 @@ class SpeakerSession:
                 sample_rate=self._engine.sample_rate,
             )
         )
-        async for frame in self._engine.synthesize(text):
-            if self._ws.client_state != WebSocketState.CONNECTED:
-                return
-            await self._ws.send_bytes(frame)
+        # Normalize BEFORE synthesis (best-effort: never raises session).
+        try:
+            normalized = await self._normalizer.normalize(text)
+        except Exception as exc:
+            self._log.warning("Normalizer raised, using original text: %s", exc)
+            normalized = text
+        try:
+            async for frame in self._engine.synthesize(normalized):
+                try:
+                    await self._ws.send_bytes(frame)
+                except WebSocketDisconnect:
+                    await self._send(ChunkAbortedMessage(chunk_id=chunk_id))
+                    return
+        except WebSocketDisconnect:
+            await self._send(ChunkAbortedMessage(chunk_id=chunk_id))
+            return
 
         await self._send(AudioEndMessage(chunk_id=chunk_id))
 
@@ -182,8 +222,12 @@ class SpeakerSession:
         except asyncio.QueueFull:
             self._log.error("Synthesis queue full — aborting session")
             await self._send(ErrorMessage(code="queue_full", message="Synthesis queue full"))
-            if self._tts_task:
+            if self._tts_task and not self._tts_task.done():
                 self._tts_task.cancel()
+                try:
+                    await self._tts_task
+                except (asyncio.CancelledError, Exception):
+                    pass
             return False
 
     async def _send(self, msg: Any) -> None:

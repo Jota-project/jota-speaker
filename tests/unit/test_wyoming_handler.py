@@ -130,6 +130,9 @@ async def test_engine_exception_does_not_crash_handler():
             raise RuntimeError("engine failure")
             yield  # make it an async generator
 
+        async def aclose(self) -> None:
+            return None
+
     handler = WyomingHandler(FailingEngine(), Settings(engine="mock"))
     writer = _FakeWriter()
     await handler.handle(_reader_with_synthesize("Hello"), writer)

@@ -15,6 +15,7 @@ def create_engine(settings: Settings) -> ITTSEngine:
                 voice=settings.kokoro_voice,
                 lang=settings.kokoro_lang,
                 sample_rate=settings.sample_rate,
+                synthesize_timeout=settings.kokoro_synthesize_timeout,
             )
         case _:
             raise ValueError(f"Unknown TTS engine: {settings.engine!r}")
