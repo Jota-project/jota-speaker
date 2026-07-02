@@ -233,3 +233,45 @@ def test_interrupt_resets_accumulator():
                 if m["type"] == "audio_start":
                     got_start = True
         assert got_start, "expected audio_start of new segment after interrupt"
+
+
+def _wait_for_text(ws, target_type: str, deadline_s: float = 2.0) -> dict:
+    """Read messages until a text message of given type arrives."""
+    deadline = time.time() + deadline_s
+    while time.time() < deadline:
+        d = ws.receive()
+        if d.get("type") == "websocket.send" and d.get("text"):
+            m = json.loads(d["text"])
+            if m["type"] == target_type:
+                return m
+    raise AssertionError(f"timed out waiting for {target_type}")
+
+
+def test_interrupt_latency_under_100ms():
+    """Measure interrupt → interrupted latency with MockEngine."""
+    engine = SlowFrameEngine()
+    client = _setup(engine)
+    with client.websocket_connect("/ws") as ws:
+        ws.send_text(json.dumps({"type": "auth", "token": "t"}))
+        ws.receive_text()
+        ws.send_text(json.dumps({"type": "token", "text": "Hello."}))
+        # Wait for audio_start
+        _wait_for_text(ws, "audio_start", deadline_s=2.0)
+
+        # Warm-up: send one interrupt (don't measure)
+        ws.send_text(json.dumps({"type": "interrupt"}))
+        _wait_for_text(ws, "interrupted", deadline_s=1.0)
+
+        # Measure 3 interrupts → averaged latency
+        latencies = []
+        for _ in range(3):
+            ws.send_text(json.dumps({"type": "token", "text": "Hi."}))
+            _wait_for_text(ws, "audio_start", deadline_s=2.0)
+            t0 = time.monotonic()
+            ws.send_text(json.dumps({"type": "interrupt"}))
+            _wait_for_text(ws, "interrupted", deadline_s=1.0)
+            elapsed_ms = (time.monotonic() - t0) * 1000
+            latencies.append(elapsed_ms)
+        # Avg should be well under 100ms with MockEngine.
+        avg = sum(latencies) / len(latencies)
+        assert avg < 100, f"avg interrupt latency {avg:.1f}ms exceeds 100ms (samples={latencies})"
