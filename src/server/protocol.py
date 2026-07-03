@@ -24,7 +24,11 @@ class EndMessage(BaseModel):
     type: Literal["end"]
 
 
-ClientMessage = AuthMessage | TokenMessage | FlushMessage | EndMessage
+class InterruptMessage(BaseModel):
+    type: Literal["interrupt"] = "interrupt"
+
+
+ClientMessage = AuthMessage | TokenMessage | FlushMessage | EndMessage | InterruptMessage
 
 
 def parse_client_message(raw: str) -> ClientMessage:
@@ -39,6 +43,8 @@ def parse_client_message(raw: str) -> ClientMessage:
             return FlushMessage.model_validate(data)
         case "end":
             return EndMessage.model_validate(data)
+        case "interrupt":
+            return InterruptMessage.model_validate(data)
         case _:
             raise ValidationError.from_exception_data(
                 title="ClientMessage",
@@ -49,7 +55,7 @@ def parse_client_message(raw: str) -> ClientMessage:
                         "loc": ("type",),
                         "msg": f"Unknown message type: {msg_type!r}",
                         "input": msg_type,
-                        "ctx": {"expected": "auth, token, flush, end"},
+                        "ctx": {"expected": "auth, token, flush, end, interrupt"},
                     }
                 ],
             )
@@ -94,8 +100,14 @@ class DoneMessage(BaseModel):
     type: Literal["done"] = "done"
 
 
+class InterruptedMessage(BaseModel):
+    type: Literal["interrupted"] = "interrupted"
+    chunk_id: int
+
+
 ServerMessage = (
     ChunkAbortedMessage
+    | InterruptedMessage
     | AuthOkMessage
     | AuthErrorMessage
     | AudioStartMessage

@@ -22,6 +22,8 @@ from .protocol import (
     EndMessage,
     ErrorMessage,
     FlushMessage,
+    InterruptedMessage,
+    InterruptMessage,
     TokenMessage,
     parse_client_message,
     serialize_server_message,
@@ -60,6 +62,8 @@ class SpeakerSession:
         self._tts_task: asyncio.Task | None = None
         self._id = uuid.uuid4().hex[:8]
         self._log = _SidAdapter(_base_logger, {"sid": self._id})
+        self._current_chunk_id: int | None = None
+        self._interrupt_lock: bool = False
 
     # ── public entry point ────────────────────────────────────────────────────
 
@@ -151,6 +155,15 @@ class SpeakerSession:
                     await self._queue.put(_SENTINEL)
                     return
 
+                elif isinstance(msg, InterruptMessage):
+                    if self._interrupt_lock:
+                        continue
+                    self._interrupt_lock = True
+                    try:
+                        await self._handle_interrupt()
+                    finally:
+                        self._interrupt_lock = False
+
         except Exception as exc:
             self._log.warning("Receive loop ended: %s", exc)
             await self._queue.put(_SENTINEL)
@@ -187,30 +200,75 @@ class SpeakerSession:
     async def _synthesize_segment(self, text: str) -> None:
         chunk_id = self._chunk_counter
         self._chunk_counter += 1
-        await self._send(
-            AudioStartMessage(
-                chunk_id=chunk_id,
-                sample_rate=self._engine.sample_rate,
+        self._current_chunk_id = chunk_id
+        try:
+            await self._send(
+                AudioStartMessage(
+                    chunk_id=chunk_id,
+                    sample_rate=self._engine.sample_rate,
+                )
             )
-        )
-        # Normalize BEFORE synthesis (best-effort: never raises session).
-        try:
-            normalized = await self._normalizer.normalize(text)
-        except Exception as exc:
-            self._log.warning("Normalizer raised, using original text: %s", exc)
-            normalized = text
-        try:
-            async for frame in self._engine.synthesize(normalized):
-                try:
-                    await self._ws.send_bytes(frame)
-                except WebSocketDisconnect:
-                    await self._send(ChunkAbortedMessage(chunk_id=chunk_id))
-                    return
-        except WebSocketDisconnect:
-            await self._send(ChunkAbortedMessage(chunk_id=chunk_id))
-            return
+            # Normalize BEFORE synthesis (best-effort: never raises session).
+            try:
+                normalized = await self._normalizer.normalize(text)
+            except Exception as exc:
+                self._log.warning("Normalizer raised, using original text: %s", exc)
+                normalized = text
+            try:
+                async for frame in self._engine.synthesize(normalized):
+                    try:
+                        await self._ws.send_bytes(frame)
+                    except WebSocketDisconnect:
+                        await self._send(ChunkAbortedMessage(chunk_id=chunk_id))
+                        return
+            except asyncio.CancelledError:
+                # Barge-in in progress: _handle_interrupt will read _current_chunk_id.
+                raise
+            except WebSocketDisconnect:
+                await self._send(ChunkAbortedMessage(chunk_id=chunk_id))
+                return
+            await self._send(AudioEndMessage(chunk_id=chunk_id))
+        finally:
+            self._current_chunk_id = None
 
-        await self._send(AudioEndMessage(chunk_id=chunk_id))
+    async def _handle_interrupt(self) -> None:
+        aborted_id = self._current_chunk_id
+        # Cancel worker (will raise CancelledError inside _synthesize_segment).
+        if self._tts_task is not None and not self._tts_task.done():
+            self._tts_task.cancel()
+            try:
+                await self._tts_task
+            except asyncio.CancelledError:
+                pass
+            except Exception as exc:
+                self._log.warning("Worker ended with error during interrupt: %s", exc)
+        # Drain queue (discard pending segments).
+        drained = 0
+        while not self._queue.empty():
+            try:
+                self._queue.get_nowait()
+                drained += 1
+            except asyncio.QueueEmpty:
+                break
+        # Reset accumulator (discard unflushed buffer).
+        try:
+            self._accumulator.flush()
+        except Exception:
+            pass
+        # Restart worker so subsequent tokens can be processed.
+        self._tts_task = asyncio.create_task(self._tts_worker())
+        # Notify client: chunk_aborted first (so client knows what to discard),
+        # then interrupted as the barge-in confirmation.
+        if aborted_id is not None:
+            try:
+                await self._send(ChunkAbortedMessage(chunk_id=aborted_id))
+            except Exception:
+                pass
+        try:
+            await self._send(InterruptedMessage(chunk_id=aborted_id or 0))
+        except Exception:
+            pass
+        self._log.info("Barge-in processed (aborted_id=%s, drained=%d)", aborted_id, drained)
 
     # ── helpers ───────────────────────────────────────────────────────────────
 
