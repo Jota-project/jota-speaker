@@ -92,6 +92,12 @@ Client                              Server
   │◄─── <binary PCM16 frame> ─────────│
   │◄─── {"type":"audio_end",…} ───────│
   │         ...                       │
+  │  (optional barge-in: see §6)      │
+  │──── {"type":"interrupt"} ─────────►│  ← cut playback
+  │◄─── {"type":"chunk_aborted",…} ───│
+  │◄─── {"type":"interrupted",…} ─────│
+  │──── {"type":"token","text":"…"} ──►│  ← new utterance
+  │         ...                       │
   │──── {"type":"end"} ───────────────►│  ← signal no more tokens
   │◄─── {"type":"done"} ──────────────│  ← all synthesis complete
   │                                   │
@@ -228,19 +234,25 @@ async for message in ws:
 
 ### 6. Interrupting playback (barge-in)
 
-When the user starts speaking mid-playback, stop TTS immediately:
-
-1. **Stop playing** audio on the client side.
-2. **Close the WebSocket** with code 1000.
-3. **Open a new WebSocket**, authenticate, and start the new TTS session.
+When the user starts speaking mid-playback, stop TTS **without** closing the WebSocket. The session stays open and you can keep sending `token` messages for the new utterance.
 
 ```
 Current session:  auth → tokens → audio playing...
-User speaks:      client closes WS (1000)
-New session:      auth → new tokens → audio
+User speaks:      client sends {"type":"interrupt"}
+                  ← chunk_aborted { chunk_id: N }
+                  ← interrupted { chunk_id: N }
+New tokens:       client sends {"type":"token", "text":"..."}
+                  ← audio_start { chunk_id: N+1, ... }
 ```
 
-Reconnection on a LAN typically takes under 100 ms. Full `interrupt` message support (in-session cancellation) is planned for a future version.
+1. **Stop playing** any audio buffered for the in-flight chunk.
+2. **Send `{"type":"interrupt"}`** as a text frame.
+3. The server cancels the in-flight chunk, discards the pending queue, resets the accumulator, and replies with `chunk_aborted` (the cut chunk) followed by `interrupted` (the chunk id that was cut, or `0` if no chunk was in flight).
+4. **Send new `token` messages** for the new utterance — no re-auth needed.
+
+Average `interrupt → interrupted` latency is well under 100 ms with the mock engine (measured by `test_interrupt_latency_under_100ms`).
+
+> **Note:** The Kokoro inference thread is not hard-cancellable. A few extra audio frames for the cut chunk may arrive on the wire after `chunk_aborted`. The client should discard any audio received after `chunk_aborted` for that `chunk_id`.
 
 ---
 
@@ -320,6 +332,13 @@ Signal that the LLM has finished. No more `token` messages will follow. The serv
 {"type": "end"}
 ```
 
+#### `interrupt`
+Cancel the in-flight chunk and discard any pending buffered text. The session stays open. See [Section 6](#6-interrupting-playback-barge-in) for the full flow.
+
+```json
+{"type":"interrupt"}
+```
+
 ---
 
 ### Server → Client
@@ -373,6 +392,30 @@ The current audio chunk is complete. All binary frames for `chunk_id` have been 
 
 ```json
 {"type": "audio_end", "chunk_id": 0}
+```
+
+#### `chunk_aborted`
+The audio chunk was cut short (client disconnected, or the client sent `interrupt`). The client should discard any audio buffered for `chunk_id`.
+
+| Field | Type | Description |
+|---|---|---|
+| `type` | `"chunk_aborted"` | |
+| `chunk_id` | integer | The chunk that was cut |
+
+```json
+{"type": "chunk_aborted", "chunk_id": 0}
+```
+
+#### `interrupted`
+Confirmation that the server processed an `interrupt` message. Sent right after `chunk_aborted` when a chunk was in flight; sent alone with `chunk_id: 0` when no chunk was in flight.
+
+| Field | Type | Description |
+|---|---|---|
+| `type` | `"interrupted"` | |
+| `chunk_id` | integer | Chunk that was cut, or `0` if no chunk was in flight |
+
+```json
+{"type": "interrupted", "chunk_id": 0}
 ```
 
 #### `done`
@@ -532,7 +575,7 @@ The Wyoming TCP port should be accessible directly (no HTTP proxy needed).
 python3 -m pytest -v
 ```
 
-60 tests, ~1 s. Uses `JOTA_ENGINE=mock` and `JOTA_AUTH_PROVIDER=stub` automatically — no model files required.
+134 tests, ~16 s. Uses `JOTA_ENGINE=mock` and `JOTA_AUTH_PROVIDER=stub` automatically — no model files required.
 
 Tests are also run automatically via GitHub Actions on every push and pull request to `main` (see `.github/workflows/test.yml`).
 
@@ -540,8 +583,9 @@ Tests are also run automatically via GitHub Actions on every push and pull reque
 
 ## Status & roadmap
 
-- **Status:** Maintained. Most recent work added Wyoming protocol support (PR landed 2026-05-21).
+- **Status:** Maintained. Most recent work added **Fase 4 barge-in** — in-session `interrupt` message with `<100 ms` cancellation latency (PR #6, 2026-07-02).
 - **Default voice:** `ef_dora` (Spanish, female). Configurable via `JOTA_KOKORO_VOICE`.
 - **Active directions:**
   - Auth migration: planning to move from `jota-db` external auth to per-service `TTS_TOKEN` (tracked in [`Jota-project/jota-gateway` issue tracker](https://github.com/Jota-project/jota-gateway/issues)).
   - Wyoming: protocol coverage for HA discoverability is complete; expect incremental fixes as HA updates.
+  - Future TTS work: TTFB metrics and barge-in latency histograms (Fase 5).
