@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**Status:** ✅ Completed (PR #6, merged 2026-07-02). 7 commits, 134 tests passing.
+
 **Goal:** Soportar barge-in en menos de 100 ms sin cerrar la sesión: el cliente envía `interrupt`, el servidor cancela el chunk en curso, descarta la cola pendiente y el accumulator, responde con `chunk_aborted` + `interrupted`, y la sesión sigue viva lista para nuevos tokens.
 
 **Architecture:** Cliente → servidor con nuevo `InterruptMessage`. Servidor: handler en `_receive_loop` que cancela el worker, drena la cola, resetea accumulator, recrea worker, envía `ChunkAbortedMessage` (Fase 1) del cortado + nuevo `InterruptedMessage { chunk_id }`. Estado nuevo en `SpeakerSession`: `_current_chunk_id` (None o chunk en vuelo) + `_interrupt_lock` (lock cooperativo contra interrupts concurrentes).

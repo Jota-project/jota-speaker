@@ -47,8 +47,11 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="jota-speaker", lifespan=lifespan)
 
 from src.server.ws_handler import router  # noqa: E402
+from src.openai.routes import register_exception_handlers, router as openai_router  # noqa: E402
 
+register_exception_handlers(app)
 app.include_router(router)
+app.include_router(openai_router)
 
 
 @app.get("/health")
