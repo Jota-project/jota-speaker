@@ -181,25 +181,28 @@ class TestInputValidation:
             headers={"Authorization": "Bearer t"},
             json={"model": "tts-1", "input": "hola", "response_format": "mp3"},
         )
-        # Pydantic catches this at 422 with our model_config still emitting the OpenAI envelope
-        assert resp.status_code == 422
+        # Pydantic catches this pre-service, but the RequestValidationError
+        # handler in routes.py still translates it to the OpenAI envelope.
+        assert resp.status_code == 400
         body = resp.json()
-        assert "response_format" in str(body)
+        assert body["error"]["param"] == "response_format"
 
-    def test_input_too_long_returns_422(self, app_with_engine_and_stub_auth):
+    def test_input_too_long_returns_400(self, app_with_engine_and_stub_auth):
         client = TestClient(app_with_engine_and_stub_auth)
         resp = client.post(
             "/v1/audio/speech",
             headers={"Authorization": "Bearer t"},
             json={"model": "tts-1", "input": "x" * 4097},
         )
-        assert resp.status_code == 422
+        assert resp.status_code == 400
+        assert resp.json()["error"]["param"] == "input"
 
-    def test_speed_out_of_range_returns_422(self, app_with_engine_and_stub_auth):
+    def test_speed_out_of_range_returns_400(self, app_with_engine_and_stub_auth):
         client = TestClient(app_with_engine_and_stub_auth)
         resp = client.post(
             "/v1/audio/speech",
             headers={"Authorization": "Bearer t"},
             json={"model": "tts-1", "input": "hola", "speed": 10.0},
         )
-        assert resp.status_code == 422
+        assert resp.status_code == 400
+        assert resp.json()["error"]["param"] == "speed"

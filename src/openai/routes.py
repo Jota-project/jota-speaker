@@ -11,6 +11,8 @@ stream. Middleware that observes end-of-stream is Phase 2.
 from __future__ import annotations
 
 from fastapi import APIRouter, FastAPI, Request
+from fastapi.exception_handlers import request_validation_exception_handler
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from src.openai.protocol import (
@@ -86,6 +88,34 @@ async def _on_engine_error(_request: Request, exc: OpenAIEngineError) -> JSONRes
     )
 
 
+async def _on_validation_error(request: Request, exc: RequestValidationError) -> JSONResponse:
+    """Translate SpeechRequest field violations to the OpenAI envelope.
+
+    Pydantic rejects some invalid requests (bad `response_format`, out-of-range
+    `speed`, `input` too long/short) before `handle_speech_request` ever runs,
+    so they never go through OpenAIBadRequestError. Only field-level errors
+    (loc has a field name past "body") get the 400 envelope here — structural
+    errors like a missing body or non-JSON content type fall back to FastAPI's
+    default 422, since there's no single field to attribute them to.
+    """
+    for error in exc.errors():
+        loc = error.get("loc", ())
+        if len(loc) >= 2 and loc[0] == "body":
+            field = str(loc[-1])
+            return JSONResponse(
+                status_code=400,
+                content=ErrorResponse(
+                    error=ErrorDetail(
+                        message=error["msg"],
+                        type="invalid_request_error",
+                        param=field,
+                        code=f"invalid_{field}",
+                    )
+                ).model_dump(),
+            )
+    return await request_validation_exception_handler(request, exc)
+
+
 def register_exception_handlers(app: FastAPI) -> None:
     """Register the OpenAI exception handlers on a FastAPI app.
 
@@ -95,3 +125,4 @@ def register_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(OpenAIAuthError, _on_auth_error)
     app.add_exception_handler(OpenAIBadRequestError, _on_bad_request)
     app.add_exception_handler(OpenAIEngineError, _on_engine_error)
+    app.add_exception_handler(RequestValidationError, _on_validation_error)

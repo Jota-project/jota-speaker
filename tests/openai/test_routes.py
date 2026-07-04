@@ -91,6 +91,60 @@ class TestEndpointShape:
         )
         assert resp.status_code == 422
 
+    def test_invalid_response_format_returns_400_envelope(self, app):
+        """response_format is a Literal, so Pydantic rejects it before the
+        service layer runs. It must still surface as an OpenAI-style 400,
+        not FastAPI's raw 422 detail shape."""
+        client = TestClient(app)
+        resp = client.post(
+            "/v1/audio/speech",
+            headers={"Authorization": "Bearer t"},
+            json={"model": "tts-1", "input": "hola", "response_format": "mp3"},
+        )
+        assert resp.status_code == 400
+        body = resp.json()
+        assert body["error"]["type"] == "invalid_request_error"
+        assert body["error"]["param"] == "response_format"
+        assert body["error"]["code"] == "invalid_response_format"
+
+    def test_speed_out_of_range_returns_400_envelope(self, app):
+        client = TestClient(app)
+        resp = client.post(
+            "/v1/audio/speech",
+            headers={"Authorization": "Bearer t"},
+            json={"model": "tts-1", "input": "hola", "speed": 10},
+        )
+        assert resp.status_code == 400
+        body = resp.json()
+        assert body["error"]["param"] == "speed"
+        assert body["error"]["code"] == "invalid_speed"
+
+    def test_input_too_long_returns_400_envelope(self, app):
+        client = TestClient(app)
+        resp = client.post(
+            "/v1/audio/speech",
+            headers={"Authorization": "Bearer t"},
+            json={"model": "tts-1", "input": "a" * 4097},
+        )
+        assert resp.status_code == 400
+        body = resp.json()
+        assert body["error"]["param"] == "input"
+        assert body["error"]["code"] == "invalid_input"
+
+    def test_empty_string_input_returns_400_envelope(self, app):
+        """Empty string fails Pydantic's min_length=1 before the service-layer
+        whitespace check runs. Both must produce the same input_empty-style
+        400 envelope, not a bare 422 for "" vs a 400 for "   "."""
+        client = TestClient(app)
+        resp = client.post(
+            "/v1/audio/speech",
+            headers={"Authorization": "Bearer t"},
+            json={"model": "tts-1", "input": ""},
+        )
+        assert resp.status_code == 400
+        body = resp.json()
+        assert body["error"]["param"] == "input"
+
 
 class TestResponseHeaders:
     def test_x_request_id_present(self, app):
