@@ -17,7 +17,6 @@ to JSON envelopes by FastAPI exception handlers in routes.py.
 
 from __future__ import annotations
 
-import logging
 import re
 import uuid
 from typing import AsyncIterator, Optional
@@ -62,8 +61,11 @@ def extract_bearer_token(authorization: Optional[str]) -> Optional[str]:
 
 
 def _auth_header(http_request: Request) -> str | None:
-    """Read the Authorization header (case-insensitive lookup)."""
-    return http_request.headers.get("authorization") or http_request.headers.get("Authorization")
+    """Read the Authorization header.
+
+    Starlette's Headers are case-insensitive — a single .get() covers any casing.
+    """
+    return http_request.headers.get("authorization")
 
 
 def _new_request_id() -> str:
@@ -148,8 +150,15 @@ async def handle_speech_request(
         normalized = request_body.input
 
     # ── 5. Synthesize (the streaming source) ───────────────────────────────
+    engine = getattr(state, "engine", None)
+    if engine is None or not hasattr(engine, "synthesize"):
+        raise OpenAIEngineError(
+            code="engine_unavailable",
+            message="TTS engine not initialized",
+            status_code=503,
+        )
     try:
-        engine_stream: AsyncIterator[bytes] = state.engine.synthesize(normalized)
+        engine_stream: AsyncIterator[bytes] = engine.synthesize(normalized)
     except Exception as exc:
         raise OpenAIEngineError(
             code="engine_error",
@@ -159,7 +168,7 @@ async def handle_speech_request(
     # ── 6. Wrap with encoder ────────────────────────────────────────────────
     fmt = request_body.response_format
     if fmt == "wav":
-        output_stream = wav_stream(engine_stream, state.engine.sample_rate)
+        output_stream = wav_stream(engine_stream, engine.sample_rate)
         media_type = "audio/wav"
     else:
         output_stream = pcm_stream(engine_stream)

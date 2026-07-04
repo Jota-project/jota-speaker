@@ -4,7 +4,6 @@ import pytest
 from pydantic import ValidationError
 
 from src.openai.protocol import (
-    ErrorDetail,
     ErrorResponse,
     OpenAIAuthError,
     OpenAIBadRequestError,

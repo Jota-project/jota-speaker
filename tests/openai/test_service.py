@@ -147,6 +147,19 @@ class TestAuthFailures:
         assert resp.json()["error"]["code"] == "auth_provider_error"
         assert resp.json()["error"]["type"] == "server_error"
 
+    def test_engine_unavailable_returns_503(self, app_with_engine_and_stub_auth):
+        """When app.state.engine is missing the spec's 503 path applies."""
+        app_with_engine_and_stub_auth.state.engine = None
+        client = TestClient(app_with_engine_and_stub_auth)
+        resp = client.post(
+            "/v1/audio/speech",
+            headers={"Authorization": "Bearer t"},
+            json={"model": "tts-1", "input": "hola"},
+        )
+        assert resp.status_code == 503
+        assert resp.json()["error"]["code"] == "engine_unavailable"
+        assert resp.json()["error"]["type"] == "server_error"
+
 
 class TestInputValidation:
     def test_whitespace_only_input_returns_400(self, app_with_engine_and_stub_auth):
