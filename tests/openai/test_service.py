@@ -34,6 +34,8 @@ def app_with_engine_and_stub_auth(monkeypatch):
         sample_rate = 24000
 
     app.state.settings = _FakeSettings()
+    from src.openai.routes import register_exception_handlers
+    register_exception_handlers(app)
     app.include_router(openai_router)
     return app
 
