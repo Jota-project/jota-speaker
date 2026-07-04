@@ -39,6 +39,8 @@ Default voice: **ef_dora** (Spanish, female). Default language: **es**.
    - [Server → Client](#server--client)
 4. [Audio format](#audio-format)
 5. [HTTP endpoints](#http-endpoints)
+   - [`GET /health`](#get-health)
+   - [`POST /v1/audio/speech`](#post-v1audiospeech)
 6. [Configuration](#configuration)
 7. [Wyoming protocol (Home Assistant)](#wyoming-protocol-home-assistant)
 8. [Running with Docker](#running-with-docker)
@@ -468,6 +470,52 @@ curl http://localhost:8005/health
 # {"status":"ok"}
 ```
 
+### `POST /v1/audio/speech`
+
+OpenAI-compatible text-to-speech. Synthesizes the given text and returns
+the audio stream. Matches the [OpenAI TTS API](https://platform.openai.com/docs/api-reference/audio/createSpeech)
+request and response shape.
+
+**Request body** (JSON):
+
+| Field | Type | Required | Default | Notes |
+|---|---|---|---|---|
+| `model` | string | yes | — | Accepted but ignored in MVP. Always `kokoro-es` in production, `mock` in tests. |
+| `input` | string | yes | — | 1–4096 chars. |
+| `voice` | string | no | `"alloy"` | Accepted but ignored in MVP. Always `JOTA_KOKORO_VOICE`. |
+| `response_format` | string | no | `"wav"` | MVP supports `"pcm"` and `"wav"` only. Other values return 400. |
+| `speed` | float | no | `1.0` | Range `0.25..4.0`. Validated, ignored in MVP. |
+| `instructions` | string | no | `null` | Accepted, ignored in MVP. |
+
+Unknown fields are silently dropped (clients sending `stream`, `logprobs`, etc. work).
+
+**Auth:** `Authorization: Bearer <token>` (same provider as WebSocket/Wyoming).
+
+**Response:** 200 OK with the audio streamed chunked:
+- `Content-Type: audio/pcm` for raw PCM16, or `audio/wav` for RIFF/WAVE.
+- `X-Request-Id`, `X-Model-Used`, `X-Voice-Used` headers.
+- WAV header has `0xFFFFFFFF` length sentinels (standard streaming practice; all modern players handle it).
+
+**Example:**
+
+```bash
+curl -X POST http://localhost:8005/v1/audio/speech \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"tts-1","input":"Hola mundo","voice":"alloy","response_format":"wav"}' \
+  --output output.wav
+
+ffplay output.wav
+```
+
+**Errors:** JSON in OpenAI error envelope format:
+
+```json
+{"error": {"message": "...", "type": "invalid_request_error", "param": null, "code": "invalid_api_key"}}
+```
+
+See [the spec](docs/superpowers/specs/2026-07-03-endpoint-openai-compatible.md) for the full error code table.
+
 ---
 
 ## Configuration
@@ -585,7 +633,13 @@ Tests are also run automatically via GitHub Actions on every push and pull reque
 
 - **Status:** Maintained. Most recent work added **Fase 4 barge-in** — in-session `interrupt` message with `<100 ms` cancellation latency (PR #6, 2026-07-02).
 - **Default voice:** `ef_dora` (Spanish, female). Configurable via `JOTA_KOKORO_VOICE`.
+- **Delivered phases:**
+  - **Wyoming** — TCP server on port `20424` for Home Assistant TTS integration.
+  - **Fase 1** — robustness & cancellation: `chunk_aborted` message, `aclose()` on engine, asyncio lock in Kokoro, integration teardown tests (PR #4, 2026-06-29).
+  - **Fase 2** — Spanish text normalization: `SpanishNormalizer` (numbers, dates, hours, currency, emails, URLs, abbreviations) + `PassThroughNormalizer` (PR #4, 2026-06-29).
+  - **Fase 4** — barge-in: in-session `interrupt` (PR #6, 2026-07-02).
 - **Active directions:**
-  - Auth migration: planning to move from `jota-db` external auth to per-service `TTS_TOKEN` (tracked in [`Jota-project/jota-gateway` issue tracker](https://github.com/Jota-project/jota-gateway/issues)).
-  - Wyoming: protocol coverage for HA discoverability is complete; expect incremental fixes as HA updates.
-  - Future TTS work: TTFB metrics and barge-in latency histograms (Fase 5).
+  - **Fase 3** — multi-voice per session: in design, paired with a separate plan for an OpenAI-style HTTP endpoint that lets clients pick voice per request. No formal spec/plan in this repo yet.
+  - **Auth migration**: planning to move from `jota-db` external auth to per-service `TTS_TOKEN` (tracked in [`Jota-project/jota-gateway` issue tracker](https://github.com/Jota-project/jota-gateway/issues)).
+  - **Wyoming**: protocol coverage for HA discoverability is complete; expect incremental fixes as HA updates.
+  - **Fase 5** — TTFB metrics + barge-in latency histograms: scope TBD (see discussion below).
