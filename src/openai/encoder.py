@@ -1,6 +1,6 @@
 """Streaming audio encoders for /v1/audio/speech.
 
-Two encoders wrap an AsyncIterator[bytes] of PCM16 LE mono chunks:
+Three encoders wrap an AsyncIterator[bytes] of PCM16 LE mono chunks:
 
 - `pcm_stream`: passthrough. Used when response_format="pcm".
 - `wav_stream`: prepends a 44-byte RIFF/WAVE header. Used when
@@ -8,6 +8,8 @@ Two encoders wrap an AsyncIterator[bytes] of PCM16 LE mono chunks:
   audio length is unknown, so both ChunkSize and data Subchunk2Size
   are set to 0xFFFFFFFF (the RF64 sentinel). All modern decoders
   (ffmpeg, VLC, Chrome, wave.open) handle this correctly.
+- `mp3_stream`: pipes chunks through an ffmpeg subprocess to produce
+  MP3 (64 kbps CBR mono). Used when response_format="mp3".
 """
 
 from __future__ import annotations
