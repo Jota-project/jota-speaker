@@ -12,8 +12,14 @@ Two encoders wrap an AsyncIterator[bytes] of PCM16 LE mono chunks:
 
 from __future__ import annotations
 
+import shutil
 import struct
 from typing import AsyncIterator
+
+
+def ffmpeg_available() -> bool:
+    """Check whether the ffmpeg binary is on PATH."""
+    return shutil.which("ffmpeg") is not None
 
 
 def build_wav_header(sample_rate: int) -> bytes:

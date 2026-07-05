@@ -15,8 +15,8 @@ FROM python:3.11-slim AS runtime
 
 WORKDIR /app
 
-# espeak-ng required by kokoro-onnx phonemizer
-RUN apt-get update && apt-get install -y --no-install-recommends espeak-ng && \
+# espeak-ng required by kokoro-onnx phonemizer; ffmpeg required for mp3 encoding
+RUN apt-get update && apt-get install -y --no-install-recommends espeak-ng ffmpeg && \
     rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /install /usr/local

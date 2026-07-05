@@ -9,7 +9,17 @@ from wave import open as wave_open
 
 import pytest
 
-from src.openai.encoder import build_wav_header, pcm_stream, wav_stream
+from src.openai.encoder import build_wav_header, ffmpeg_available, pcm_stream, wav_stream
+
+
+class TestFfmpegAvailable:
+    def test_true_when_binary_on_path(self, monkeypatch):
+        monkeypatch.setattr(shutil, "which", lambda name: "/usr/bin/ffmpeg")
+        assert ffmpeg_available() is True
+
+    def test_false_when_binary_missing(self, monkeypatch):
+        monkeypatch.setattr(shutil, "which", lambda name: None)
+        assert ffmpeg_available() is False
 
 
 def _async_iter(chunks):
