@@ -9,7 +9,7 @@ from wave import open as wave_open
 
 import pytest
 
-from src.openai.encoder import build_wav_header, ffmpeg_available, pcm_stream, wav_stream
+from src.openai.encoder import build_wav_header, ffmpeg_available, mp3_stream, pcm_stream, wav_stream
 
 
 class TestFfmpegAvailable:
@@ -146,3 +146,41 @@ class TestWavHeaderFfprobeCompat:
             text=True,
         )
         assert result.returncode == 0, f"ffprobe rejected: {result.stderr}"
+
+
+@pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg not installed")
+class TestMp3Stream:
+    @pytest.mark.asyncio
+    async def test_produces_valid_mp3(self, tmp_path):
+        # 1 second of silence at 24kHz mono PCM16, split into 200ms chunks
+        # to mirror how KokoroEngine/MockEngine actually yield audio.
+        silence = b"\x00" * (24000 * 2)
+        chunk_size = 4800 * 2
+        chunks = [silence[i : i + chunk_size] for i in range(0, len(silence), chunk_size)]
+
+        result = bytearray()
+        async for chunk in mp3_stream(_async_iter(chunks), 24000):
+            result.extend(chunk)
+        assert len(result) > 0
+
+        mp3_path = tmp_path / "out.mp3"
+        mp3_path.write_bytes(bytes(result))
+        probe = subprocess.run(
+            [
+                "ffprobe", "-v", "error",
+                "-show_entries", "format=format_name",
+                "-of", "csv=p=0",
+                str(mp3_path),
+            ],
+            capture_output=True,
+            text=True,
+        )
+        assert probe.returncode == 0, f"ffprobe rejected output: {probe.stderr}"
+        assert "mp3" in probe.stdout.lower()
+
+    @pytest.mark.asyncio
+    async def test_empty_input_does_not_hang(self):
+        result = []
+        async for chunk in mp3_stream(_async_iter([]), 24000):
+            result.append(chunk)
+        assert isinstance(result, list)  # completes without hanging/raising

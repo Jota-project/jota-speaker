@@ -12,9 +12,14 @@ Two encoders wrap an AsyncIterator[bytes] of PCM16 LE mono chunks:
 
 from __future__ import annotations
 
+import asyncio
 import shutil
 import struct
 from typing import AsyncIterator
+
+from src.core.logger import get_logger
+
+_log = get_logger(__name__)
 
 
 def ffmpeg_available() -> bool:
@@ -74,3 +79,66 @@ async def wav_stream(
     yield build_wav_header(sample_rate)
     async for chunk in source:
         yield chunk
+
+
+_MP3_BITRATE = "64k"
+_READ_CHUNK_SIZE = 4096
+
+
+async def mp3_stream(
+    source: AsyncIterator[bytes],
+    sample_rate: int,
+) -> AsyncIterator[bytes]:
+    """Encode a PCM16 LE mono stream to MP3 (64 kbps CBR) via a piped ffmpeg subprocess.
+
+    A background task feeds `source` chunks into ffmpeg's stdin and closes it
+    once `source` is exhausted; this generator yields stdout chunks as ffmpeg
+    produces them, so the first MP3 bytes can reach the client before the
+    whole input has been synthesized.
+    """
+    proc = await asyncio.create_subprocess_exec(
+        "ffmpeg",
+        "-loglevel", "error",
+        "-f", "s16le",
+        "-ar", str(sample_rate),
+        "-ac", "1",
+        "-i", "pipe:0",
+        "-f", "mp3",
+        "-b:a", _MP3_BITRATE,
+        "pipe:1",
+        stdin=asyncio.subprocess.PIPE,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+
+    async def _feed_stdin() -> None:
+        try:
+            async for chunk in source:
+                proc.stdin.write(chunk)
+                await proc.stdin.drain()
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+        except Exception as exc:
+            _log.warning("mp3_stream: source raised while feeding ffmpeg: %s", exc)
+        finally:
+            if not proc.stdin.is_closing():
+                proc.stdin.close()
+
+    async def _drain_stderr() -> None:
+        stderr = await proc.stderr.read()
+        if stderr:
+            _log.warning("ffmpeg stderr: %s", stderr.decode(errors="replace"))
+
+    feed_task = asyncio.create_task(_feed_stdin())
+    stderr_task = asyncio.create_task(_drain_stderr())
+
+    try:
+        while True:
+            chunk = await proc.stdout.read(_READ_CHUNK_SIZE)
+            if not chunk:
+                break
+            yield chunk
+    finally:
+        if proc.returncode is None:
+            proc.kill()
+        await asyncio.gather(feed_task, stderr_task, proc.wait(), return_exceptions=True)
