@@ -154,3 +154,30 @@ async def mp3_stream(
     """Encode a PCM16 LE mono stream to MP3 (64 kbps CBR) via ffmpeg."""
     async for chunk in _ffmpeg_stream(source, sample_rate, ["-f", "mp3", "-b:a", "64k"]):
         yield chunk
+
+
+async def opus_stream(
+    source: AsyncIterator[bytes],
+    sample_rate: int,
+) -> AsyncIterator[bytes]:
+    """Encode a PCM16 LE mono stream to Ogg Opus (64 kbps) via ffmpeg."""
+    async for chunk in _ffmpeg_stream(source, sample_rate, ["-f", "ogg", "-c:a", "libopus", "-b:a", "64k"]):
+        yield chunk
+
+
+async def aac_stream(
+    source: AsyncIterator[bytes],
+    sample_rate: int,
+) -> AsyncIterator[bytes]:
+    """Encode a PCM16 LE mono stream to AAC (ADTS, 64 kbps) via ffmpeg."""
+    async for chunk in _ffmpeg_stream(source, sample_rate, ["-f", "adts", "-c:a", "aac", "-b:a", "64k"]):
+        yield chunk
+
+
+async def flac_stream(
+    source: AsyncIterator[bytes],
+    sample_rate: int,
+) -> AsyncIterator[bytes]:
+    """Encode a PCM16 LE mono stream to FLAC (lossless) via ffmpeg."""
+    async for chunk in _ffmpeg_stream(source, sample_rate, ["-f", "flac", "-c:a", "flac"]):
+        yield chunk

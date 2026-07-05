@@ -9,7 +9,16 @@ from wave import open as wave_open
 
 import pytest
 
-from src.openai.encoder import build_wav_header, ffmpeg_available, mp3_stream, pcm_stream, wav_stream
+from src.openai.encoder import (
+    aac_stream,
+    build_wav_header,
+    ffmpeg_available,
+    flac_stream,
+    mp3_stream,
+    opus_stream,
+    pcm_stream,
+    wav_stream,
+)
 
 
 class TestFfmpegAvailable:
@@ -184,3 +193,111 @@ class TestMp3Stream:
         async for chunk in mp3_stream(_async_iter([]), 24000):
             result.append(chunk)
         assert isinstance(result, list)  # completes without hanging/raising
+
+
+@pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg not installed")
+class TestOpusStream:
+    @pytest.mark.asyncio
+    async def test_produces_valid_opus(self, tmp_path):
+        silence = b"\x00" * (24000 * 2)
+        chunk_size = 4800 * 2
+        chunks = [silence[i : i + chunk_size] for i in range(0, len(silence), chunk_size)]
+
+        result = bytearray()
+        async for chunk in opus_stream(_async_iter(chunks), 24000):
+            result.extend(chunk)
+        assert len(result) > 0
+
+        opus_path = tmp_path / "out.opus"
+        opus_path.write_bytes(bytes(result))
+        probe = subprocess.run(
+            [
+                "ffprobe", "-v", "error",
+                "-show_entries", "stream=codec_name",
+                "-of", "csv=p=0",
+                str(opus_path),
+            ],
+            capture_output=True,
+            text=True,
+        )
+        assert probe.returncode == 0, f"ffprobe rejected output: {probe.stderr}"
+        assert "opus" in probe.stdout.lower()
+
+    @pytest.mark.asyncio
+    async def test_empty_input_does_not_hang(self):
+        result = []
+        async for chunk in opus_stream(_async_iter([]), 24000):
+            result.append(chunk)
+        assert isinstance(result, list)
+
+
+@pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg not installed")
+class TestAacStream:
+    @pytest.mark.asyncio
+    async def test_produces_valid_aac(self, tmp_path):
+        silence = b"\x00" * (24000 * 2)
+        chunk_size = 4800 * 2
+        chunks = [silence[i : i + chunk_size] for i in range(0, len(silence), chunk_size)]
+
+        result = bytearray()
+        async for chunk in aac_stream(_async_iter(chunks), 24000):
+            result.extend(chunk)
+        assert len(result) > 0
+
+        aac_path = tmp_path / "out.aac"
+        aac_path.write_bytes(bytes(result))
+        probe = subprocess.run(
+            [
+                "ffprobe", "-v", "error",
+                "-show_entries", "stream=codec_name",
+                "-of", "csv=p=0",
+                str(aac_path),
+            ],
+            capture_output=True,
+            text=True,
+        )
+        assert probe.returncode == 0, f"ffprobe rejected output: {probe.stderr}"
+        assert "aac" in probe.stdout.lower()
+
+    @pytest.mark.asyncio
+    async def test_empty_input_does_not_hang(self):
+        result = []
+        async for chunk in aac_stream(_async_iter([]), 24000):
+            result.append(chunk)
+        assert isinstance(result, list)
+
+
+@pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg not installed")
+class TestFlacStream:
+    @pytest.mark.asyncio
+    async def test_produces_valid_flac(self, tmp_path):
+        silence = b"\x00" * (24000 * 2)
+        chunk_size = 4800 * 2
+        chunks = [silence[i : i + chunk_size] for i in range(0, len(silence), chunk_size)]
+
+        result = bytearray()
+        async for chunk in flac_stream(_async_iter(chunks), 24000):
+            result.extend(chunk)
+        assert len(result) > 0
+
+        flac_path = tmp_path / "out.flac"
+        flac_path.write_bytes(bytes(result))
+        probe = subprocess.run(
+            [
+                "ffprobe", "-v", "error",
+                "-show_entries", "format=format_name",
+                "-of", "csv=p=0",
+                str(flac_path),
+            ],
+            capture_output=True,
+            text=True,
+        )
+        assert probe.returncode == 0, f"ffprobe rejected output: {probe.stderr}"
+        assert "flac" in probe.stdout.lower()
+
+    @pytest.mark.asyncio
+    async def test_empty_input_does_not_hang(self):
+        result = []
+        async for chunk in flac_stream(_async_iter([]), 24000):
+            result.append(chunk)
+        assert isinstance(result, list)
