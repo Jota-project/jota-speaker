@@ -34,6 +34,7 @@ def app_with_engine_and_stub_auth(monkeypatch):
         sample_rate = 24000
 
     app.state.settings = _FakeSettings()
+    app.state.ffmpeg_available = True
     from src.openai.routes import register_exception_handlers
     register_exception_handlers(app)
     app.include_router(openai_router)
@@ -161,6 +162,21 @@ class TestAuthFailures:
         assert resp.json()["error"]["type"] == "server_error"
 
 
+class TestFfmpegFormatUnavailable:
+    @pytest.mark.parametrize("fmt", ["mp3", "opus", "aac", "flac"])
+    def test_unavailable_returns_503(self, app_with_engine_and_stub_auth, fmt):
+        app_with_engine_and_stub_auth.state.ffmpeg_available = False
+        client = TestClient(app_with_engine_and_stub_auth)
+        resp = client.post(
+            "/v1/audio/speech",
+            headers={"Authorization": "Bearer t"},
+            json={"model": "tts-1", "input": "hola", "response_format": fmt},
+        )
+        assert resp.status_code == 503
+        assert resp.json()["error"]["code"] == "audio_format_unavailable"
+        assert resp.json()["error"]["type"] == "server_error"
+
+
 class TestInputValidation:
     def test_whitespace_only_input_returns_400(self, app_with_engine_and_stub_auth):
         client = TestClient(app_with_engine_and_stub_auth)
@@ -179,7 +195,7 @@ class TestInputValidation:
         resp = client.post(
             "/v1/audio/speech",
             headers={"Authorization": "Bearer t"},
-            json={"model": "tts-1", "input": "hola", "response_format": "mp3"},
+            json={"model": "tts-1", "input": "hola", "response_format": "aiff"},
         )
         # Pydantic catches this pre-service, but the RequestValidationError
         # handler in routes.py still translates it to the OpenAI envelope.

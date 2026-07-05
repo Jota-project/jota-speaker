@@ -25,7 +25,7 @@ from fastapi import Request
 from fastapi.responses import StreamingResponse
 
 from src.core.logger import get_logger
-from src.openai.encoder import pcm_stream, wav_stream
+from src.openai.encoder import aac_stream, flac_stream, mp3_stream, opus_stream, pcm_stream, wav_stream
 from src.openai.protocol import (
     OpenAIAuthError,
     OpenAIBadRequestError,
@@ -35,6 +35,13 @@ from src.openai.protocol import (
 
 
 _log = get_logger(__name__)
+
+_FFMPEG_ENCODERS = {
+    "mp3": ("audio/mpeg", mp3_stream),
+    "opus": ("audio/ogg", opus_stream),
+    "aac": ("audio/aac", aac_stream),
+    "flac": ("audio/flac", flac_stream),
+}
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -93,7 +100,8 @@ async def handle_speech_request(
     3. Generate a request_id, log start.
     4. Normalize the input via app.state.normalizer (best-effort).
     5. Call engine.synthesize(normalized) → AsyncIterator[bytes].
-    6. Wrap with pcm_stream or wav_stream per response_format.
+    6. Wrap with pcm_stream, wav_stream, or one of the ffmpeg-based
+       encoders (mp3/opus/aac/flac) per response_format.
     7. Return StreamingResponse with X-Request-Id, X-Model-Used, X-Voice-Used.
 
     Raises:
@@ -150,6 +158,14 @@ async def handle_speech_request(
         normalized = request_body.input
 
     # ── 5. Synthesize (the streaming source) ───────────────────────────────
+    fmt = request_body.response_format
+    if fmt in _FFMPEG_ENCODERS and not getattr(state, "ffmpeg_available", False):
+        raise OpenAIEngineError(
+            code="audio_format_unavailable",
+            message=f"{fmt} encoding not available (ffmpeg not installed)",
+            status_code=503,
+        )
+
     engine = getattr(state, "engine", None)
     if engine is None or not hasattr(engine, "synthesize"):
         raise OpenAIEngineError(
@@ -166,8 +182,10 @@ async def handle_speech_request(
         )
 
     # ── 6. Wrap with encoder ────────────────────────────────────────────────
-    fmt = request_body.response_format
-    if fmt == "wav":
+    if fmt in _FFMPEG_ENCODERS:
+        media_type, encoder_fn = _FFMPEG_ENCODERS[fmt]
+        output_stream = encoder_fn(engine_stream, engine.sample_rate)
+    elif fmt == "wav":
         output_stream = wav_stream(engine_stream, engine.sample_rate)
         media_type = "audio/wav"
     else:

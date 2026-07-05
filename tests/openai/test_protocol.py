@@ -18,7 +18,7 @@ class TestSpeechRequestHappyPath:
         assert r.model == "tts-1"
         assert r.input == "hola"
         assert r.voice == "alloy"  # default
-        assert r.response_format == "wav"  # default (MVP: not "mp3")
+        assert r.response_format == "wav"  # default
         assert r.speed == 1.0  # default
         assert r.instructions is None  # default
 
@@ -35,6 +35,38 @@ class TestSpeechRequestHappyPath:
         assert r.response_format == "pcm"
         assert r.speed == 2.0
         assert r.instructions == "habla despacio"
+
+    def test_response_format_mp3_accepted(self):
+        r = SpeechRequest.model_validate({
+            "model": "tts-1",
+            "input": "hola",
+            "response_format": "mp3",
+        })
+        assert r.response_format == "mp3"
+
+    def test_response_format_opus_accepted(self):
+        r = SpeechRequest.model_validate({
+            "model": "tts-1",
+            "input": "hola",
+            "response_format": "opus",
+        })
+        assert r.response_format == "opus"
+
+    def test_response_format_aac_accepted(self):
+        r = SpeechRequest.model_validate({
+            "model": "tts-1",
+            "input": "hola",
+            "response_format": "aac",
+        })
+        assert r.response_format == "aac"
+
+    def test_response_format_flac_accepted(self):
+        r = SpeechRequest.model_validate({
+            "model": "tts-1",
+            "input": "hola",
+            "response_format": "flac",
+        })
+        assert r.response_format == "flac"
 
     def test_extra_fields_are_ignored(self):
         """OpenAI clients send fields like stream, logprobs, n. They must be
@@ -71,20 +103,12 @@ class TestSpeechRequestRejections:
         r = SpeechRequest.model_validate({"model": "tts-1", "input": "x" * 4096})
         assert len(r.input) == 4096
 
-    def test_response_format_mp3_rejected(self):
+    def test_response_format_aiff_rejected(self):
         with pytest.raises(ValidationError):
             SpeechRequest.model_validate({
                 "model": "tts-1",
                 "input": "hola",
-                "response_format": "mp3",
-            })
-
-    def test_response_format_opus_rejected(self):
-        with pytest.raises(ValidationError):
-            SpeechRequest.model_validate({
-                "model": "tts-1",
-                "input": "hola",
-                "response_format": "opus",
+                "response_format": "aiff",
             })
 
     def test_speed_below_minimum_rejected(self):
