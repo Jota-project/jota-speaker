@@ -34,7 +34,7 @@ class SpeechRequest(BaseModel):
     model: str
     input: str = Field(min_length=1, max_length=4096)
     voice: str = "alloy"
-    response_format: Literal["pcm", "wav", "mp3"] = "wav"
+    response_format: Literal["pcm", "wav", "mp3", "opus", "aac", "flac"] = "wav"
     speed: float = 1.0
     instructions: str | None = None
 

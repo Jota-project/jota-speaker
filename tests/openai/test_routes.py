@@ -32,7 +32,7 @@ def app():
         sample_rate = 24000
 
     app.state.settings = _Settings()
-    app.state.mp3_available = True
+    app.state.ffmpeg_available = True
     register_exception_handlers(app)
     app.include_router(openai_router)
     return app
@@ -102,7 +102,7 @@ class TestEndpointShape:
         resp = client.post(
             "/v1/audio/speech",
             headers={"Authorization": "Bearer t"},
-            json={"model": "tts-1", "input": "hola", "response_format": "opus"},
+            json={"model": "tts-1", "input": "hola", "response_format": "aiff"},
         )
         assert resp.status_code == 400
         body = resp.json()
@@ -205,26 +205,33 @@ class TestWavHeaderSampleRate:
         assert sample_rate_in_header == 24000
 
 
-class TestMp3Format:
+class TestFfmpegFormats:
     @pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg not installed")
-    def test_mp3_format_returns_200_audio_mpeg(self, app):
+    @pytest.mark.parametrize("fmt,content_type", [
+        ("mp3", "audio/mpeg"),
+        ("opus", "audio/ogg"),
+        ("aac", "audio/aac"),
+        ("flac", "audio/flac"),
+    ])
+    def test_format_returns_200_with_content_type(self, app, fmt, content_type):
         client = TestClient(app)
         resp = client.post(
             "/v1/audio/speech",
             headers={"Authorization": "Bearer t"},
-            json={"model": "tts-1", "input": "hola", "response_format": "mp3"},
+            json={"model": "tts-1", "input": "hola", "response_format": fmt},
         )
         assert resp.status_code == 200
-        assert resp.headers["content-type"] == "audio/mpeg"
+        assert resp.headers["content-type"] == content_type
         assert len(resp.content) > 0
 
-    def test_mp3_unavailable_returns_503(self, app):
-        app.state.mp3_available = False
+    @pytest.mark.parametrize("fmt", ["mp3", "opus", "aac", "flac"])
+    def test_unavailable_returns_503(self, app, fmt):
+        app.state.ffmpeg_available = False
         client = TestClient(app)
         resp = client.post(
             "/v1/audio/speech",
             headers={"Authorization": "Bearer t"},
-            json={"model": "tts-1", "input": "hola", "response_format": "mp3"},
+            json={"model": "tts-1", "input": "hola", "response_format": fmt},
         )
         assert resp.status_code == 503
-        assert resp.json()["error"]["code"] == "mp3_unavailable"
+        assert resp.json()["error"]["code"] == "audio_format_unavailable"

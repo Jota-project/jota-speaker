@@ -26,9 +26,9 @@ async def lifespan(app: FastAPI):
 
     from src.openai.encoder import ffmpeg_available
 
-    app.state.mp3_available = ffmpeg_available()
-    if not app.state.mp3_available:
-        logger.warning("ffmpeg not found on PATH — POST /v1/audio/speech with response_format=mp3 will return 503")
+    app.state.ffmpeg_available = ffmpeg_available()
+    if not app.state.ffmpeg_available:
+        logger.warning("ffmpeg not found on PATH — POST /v1/audio/speech with response_format in {mp3,opus,aac,flac} will return 503")
 
     if settings.wyoming_enabled:
         from src.wyoming.server import WyomingServer
