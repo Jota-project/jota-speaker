@@ -62,3 +62,31 @@ def test_settings_kokoro_synthesize_timeout_from_env(monkeypatch):
     monkeypatch.setenv("JOTA_KOKORO_SYNTHESIZE_TIMEOUT", "2.5")
     s = Settings(_env_file=None)
     assert s.kokoro_synthesize_timeout == 2.5
+
+
+@pytest.mark.asyncio
+async def test_ittsengine_default_voice_and_available_voices_defaults():
+    class DummyEngine(ITTSEngine):
+        async def synthesize(self, text: str, voice: str | None = None):
+            yield b""
+
+        @property
+        def sample_rate(self) -> int:
+            return 24000
+
+        async def aclose(self) -> None:
+            pass
+
+    eng = DummyEngine()
+    assert eng.default_voice == ""
+    assert eng.available_voices() is None
+    assert eng.resolve_voice("anything") == "anything"
+    assert eng.resolve_voice(None) == ""
+    assert eng.resolve_voice("") == ""
+
+
+@pytest.mark.asyncio
+async def test_mock_engine_resolve_voice_accepts_any_requested():
+    eng = MockEngine()
+    assert eng.resolve_voice("shimmer") == "shimmer"
+    assert eng.resolve_voice(None) == ""
