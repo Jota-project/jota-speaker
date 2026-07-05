@@ -483,7 +483,7 @@ request and response shape.
 | `model` | string | yes | — | Accepted but ignored in MVP. Always `kokoro-es` in production, `mock` in tests. |
 | `input` | string | yes | — | 1–4096 chars. |
 | `voice` | string | no | `"alloy"` | Accepted but ignored in MVP. Always `JOTA_KOKORO_VOICE`. |
-| `response_format` | string | no | `"wav"` | MVP supports `"pcm"` and `"wav"` only. Other values return 400. |
+| `response_format` | string | no | `"wav"` | Supports `"pcm"`, `"wav"`, and `"mp3"` (64 kbps CBR mono, via ffmpeg). Other values return 400. |
 | `speed` | float | no | `1.0` | Range `0.25..4.0`. Validated, ignored in MVP. |
 | `instructions` | string | no | `null` | Accepted, ignored in MVP. |
 
@@ -492,9 +492,10 @@ Unknown fields are silently dropped (clients sending `stream`, `logprobs`, etc. 
 **Auth:** `Authorization: Bearer <token>` (same provider as WebSocket/Wyoming).
 
 **Response:** 200 OK with the audio streamed chunked:
-- `Content-Type: audio/pcm` for raw PCM16, or `audio/wav` for RIFF/WAVE.
+- `Content-Type: audio/pcm` for raw PCM16, `audio/wav` for RIFF/WAVE, or `audio/mpeg` for MP3 (64 kbps CBR mono).
 - `X-Request-Id`, `X-Model-Used`, `X-Voice-Used` headers.
 - WAV header has `0xFFFFFFFF` length sentinels (standard streaming practice; all modern players handle it).
+- If `response_format=mp3` is requested but ffmpeg isn't installed on the host, returns `503` with error code `mp3_unavailable` instead of failing to start up.
 
 **Example:**
 
