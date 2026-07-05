@@ -1,6 +1,6 @@
 """Streaming audio encoders for /v1/audio/speech.
 
-Three encoders wrap an AsyncIterator[bytes] of PCM16 LE mono chunks:
+Encoders wrap an AsyncIterator[bytes] of PCM16 LE mono chunks:
 
 - `pcm_stream`: passthrough. Used when response_format="pcm".
 - `wav_stream`: prepends a 44-byte RIFF/WAVE header. Used when
@@ -8,8 +8,9 @@ Three encoders wrap an AsyncIterator[bytes] of PCM16 LE mono chunks:
   audio length is unknown, so both ChunkSize and data Subchunk2Size
   are set to 0xFFFFFFFF (the RF64 sentinel). All modern decoders
   (ffmpeg, VLC, Chrome, wave.open) handle this correctly.
-- `mp3_stream`: pipes chunks through an ffmpeg subprocess to produce
-  MP3 (64 kbps CBR mono). Used when response_format="mp3".
+- `mp3_stream`/`opus_stream`/`aac_stream`/`flac_stream`: pipe chunks
+  through an ffmpeg subprocess via the shared `_ffmpeg_stream` helper.
+  Used when response_format is "mp3", "opus", "aac", or "flac".
 """
 
 from __future__ import annotations
@@ -83,20 +84,21 @@ async def wav_stream(
         yield chunk
 
 
-_MP3_BITRATE = "64k"
 _READ_CHUNK_SIZE = 4096
 
 
-async def mp3_stream(
+async def _ffmpeg_stream(
     source: AsyncIterator[bytes],
     sample_rate: int,
+    output_args: list[str],
 ) -> AsyncIterator[bytes]:
-    """Encode a PCM16 LE mono stream to MP3 (64 kbps CBR) via a piped ffmpeg subprocess.
+    """Pipe a PCM16 LE mono stream through ffmpeg with the given output args.
 
     A background task feeds `source` chunks into ffmpeg's stdin and closes it
     once `source` is exhausted; this generator yields stdout chunks as ffmpeg
-    produces them, so the first MP3 bytes can reach the client before the
-    whole input has been synthesized.
+    produces them, so the first encoded bytes can reach the client before the
+    whole input has been synthesized. Shared by mp3_stream/opus_stream/
+    aac_stream/flac_stream — only `output_args` differs per format.
     """
     proc = await asyncio.create_subprocess_exec(
         "ffmpeg",
@@ -105,8 +107,7 @@ async def mp3_stream(
         "-ar", str(sample_rate),
         "-ac", "1",
         "-i", "pipe:0",
-        "-f", "mp3",
-        "-b:a", _MP3_BITRATE,
+        *output_args,
         "pipe:1",
         stdin=asyncio.subprocess.PIPE,
         stdout=asyncio.subprocess.PIPE,
@@ -121,7 +122,7 @@ async def mp3_stream(
         except (BrokenPipeError, ConnectionResetError):
             pass
         except Exception as exc:
-            _log.warning("mp3_stream: source raised while feeding ffmpeg: %s", exc)
+            _log.warning("_ffmpeg_stream: source raised while feeding ffmpeg: %s", exc)
         finally:
             if not proc.stdin.is_closing():
                 proc.stdin.close()
@@ -144,3 +145,12 @@ async def mp3_stream(
         if proc.returncode is None:
             proc.kill()
         await asyncio.gather(feed_task, stderr_task, proc.wait(), return_exceptions=True)
+
+
+async def mp3_stream(
+    source: AsyncIterator[bytes],
+    sample_rate: int,
+) -> AsyncIterator[bytes]:
+    """Encode a PCM16 LE mono stream to MP3 (64 kbps CBR) via ffmpeg."""
+    async for chunk in _ffmpeg_stream(source, sample_rate, ["-f", "mp3", "-b:a", "64k"]):
+        yield chunk
