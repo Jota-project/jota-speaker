@@ -206,7 +206,10 @@ class TestOpusStream:
         result = bytearray()
         async for chunk in opus_stream(_async_iter(chunks), 24000):
             result.extend(chunk)
-        assert len(result) > 0
+        # 1s at 64kbps CBR ≈ 8000 bytes + Ogg container overhead. libopus
+        # defaults to VBR, which collapses silence to a few hundred bytes —
+        # this floor catches a regression to that default.
+        assert len(result) > 4000
 
         opus_path = tmp_path / "out.opus"
         opus_path.write_bytes(bytes(result))
