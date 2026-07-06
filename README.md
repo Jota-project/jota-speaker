@@ -632,15 +632,24 @@ Tests are also run automatically via GitHub Actions on every push and pull reque
 
 ## Status & roadmap
 
-- **Status:** Maintained. Most recent work added **Fase 4 barge-in** — in-session `interrupt` message with `<100 ms` cancellation latency (PR #6, 2026-07-02).
+- **Status:** Maintained. Most recent work added **Fase 4 barge-in** — in-session `interrupt` message with `<100 ms` cancellation latency (PR #6, 2026-07-02) — and **Fase 6 OpenAI-compatible endpoint** — `POST /v1/audio/speech` with PCM/WAV output (PR #9, 2026-07-06).
 - **Default voice:** `ef_dora` (Spanish, female). Configurable via `JOTA_KOKORO_VOICE`.
 - **Delivered phases:**
   - **Wyoming** — TCP server on port `20424` for Home Assistant TTS integration.
   - **Fase 1** — robustness & cancellation: `chunk_aborted` message, `aclose()` on engine, asyncio lock in Kokoro, integration teardown tests (PR #4, 2026-06-29).
   - **Fase 2** — Spanish text normalization: `SpanishNormalizer` (numbers, dates, hours, currency, emails, URLs, abbreviations) + `PassThroughNormalizer` (PR #4, 2026-06-29).
   - **Fase 4** — barge-in: in-session `interrupt` (PR #6, 2026-07-02).
-- **Active directions:**
-  - **Fase 3** — multi-voice per session: in design, paired with a separate plan for an OpenAI-style HTTP endpoint that lets clients pick voice per request. No formal spec/plan in this repo yet.
+  - **Fase 6** — OpenAI-compatible `POST /v1/audio/speech`: Bearer auth, PCM16 + WAV output, streaming, OpenAI error envelope (PR #9, 2026-07-06).
+- **Active directions (GitHub issues):**
+  - [#12](https://github.com/Jota-project/jota-speaker/issues/12) — `voice` param: honor per-request voice selection.
+  - [#13](https://github.com/Jota-project/jota-speaker/issues/13) — `speed` param: honor `speed` in `POST /v1/audio/speech`.
+  - [#14](https://github.com/Jota-project/jota-speaker/issues/14) — `GET /v1/models` endpoint: advertise available voices from `voices-v1.0.bin`.
+  - [#15](https://github.com/Jota-project/jota-speaker/issues/15) — `instructions` field: honor SSML-like voice instructions per request.
+  - [#16](https://github.com/Jota-project/jota-speaker/issues/16) — SSE/Realtime endpoint: OpenAI Realtime-style streaming.
+  - [#17](https://github.com/Jota-project/jota-speaker/issues/17) — configurable bitrate for mp3/opus/aac response formats.
+  - [#18](https://github.com/Jota-project/jota-speaker/issues/18) — investigate true CBR for AAC stream.
+  - [#2](https://github.com/Jota-project/jota-speaker/issues/2) — concurrency control: semaphore for TTS engine.
+  - [#9](https://github.com/Jota-project/jota-speaker/issues/9) — buffered (Content-Length) response mode for `/v1/audio/speech`.
   - **Auth migration**: planning to move from `jota-db` external auth to per-service `TTS_TOKEN` (tracked in [`Jota-project/jota-gateway` issue tracker](https://github.com/Jota-project/jota-gateway/issues)).
   - **Wyoming**: protocol coverage for HA discoverability is complete; expect incremental fixes as HA updates.
-  - **Fase 5** — TTFB metrics + barge-in latency histograms: scope TBD (see discussion below).
+  - **Fase 5** — TTFB metrics + barge-in latency histograms: scope TBD.
