@@ -31,6 +31,14 @@ class SpeechRequest(BaseModel):
     `instructions` is still validated but ignored; clients sending
     arbitrary values do not get a 4xx — only nonsense values (empty
     strings, out-of-range speed) are rejected.
+
+    `stream` is a jota-speaker extension, not part of the real OpenAI wire
+    shape (OpenAI's endpoint always transmits chunked and has no such
+    field — see issue #9). `stream=true` (default) keeps that behavior;
+    `stream=false` buffers the full response and returns it with an exact
+    `Content-Length` (and, for `wav`, byte-accurate header sizes instead of
+    the streaming sentinel) — for strict clients/players that handle
+    chunked transfer or unknown-length WAV headers poorly.
     """
 
     model_config = ConfigDict(extra="ignore")
@@ -41,6 +49,7 @@ class SpeechRequest(BaseModel):
     response_format: Literal["pcm", "wav", "mp3", "opus", "aac", "flac"] = "wav"
     speed: float = 1.0
     instructions: str | None = None
+    stream: bool = True
 
     @field_validator("model", "voice")
     @classmethod

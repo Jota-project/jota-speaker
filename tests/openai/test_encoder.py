@@ -76,6 +76,22 @@ class TestWavHeaderBuilder:
         assert struct.unpack("<I", h[28:32])[0] == sample_rate * 2
         assert len(h) == HEADER_LEN
 
+    def test_data_size_none_keeps_sentinel(self):
+        h = build_wav_header(24000, data_size=None)
+        assert struct.unpack("<I", h[4:8])[0] == 0xFFFFFFFF
+        assert struct.unpack("<I", h[40:44])[0] == 0xFFFFFFFF
+
+    def test_data_size_given_produces_exact_sizes(self):
+        h = build_wav_header(24000, data_size=1000)
+        assert struct.unpack("<I", h[4:8])[0] == 1036  # 36 + data_size
+        assert struct.unpack("<I", h[40:44])[0] == 1000
+        assert len(h) == HEADER_LEN
+
+    def test_data_size_zero_is_not_treated_as_none(self):
+        h = build_wav_header(24000, data_size=0)
+        assert struct.unpack("<I", h[4:8])[0] == 36
+        assert struct.unpack("<I", h[40:44])[0] == 0
+
 
 class TestPcmStream:
     @pytest.mark.asyncio

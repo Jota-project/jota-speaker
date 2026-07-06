@@ -495,15 +495,17 @@ request and response shape.
 | `response_format` | string | no | `"wav"` | Supports `"pcm"`, `"wav"`, `"mp3"`, `"opus"`, `"aac"`, and `"flac"` (64 kbps CBR mono for mp3/opus/aac, lossless for flac; all via ffmpeg). Other values return 400. |
 | `speed` | float | no | `1.0` | Range `0.25..4.0` (Pydantic-validated). Clamped to whatever the resolved engine natively supports (Kokoro: `0.5..2.0`) via `resolve_speed()` — never rejected, just clamped. |
 | `instructions` | string | no | `null` | Accepted, ignored in MVP. |
+| `stream` | bool | no | `true` | jota-speaker extension, not part of the real OpenAI wire shape (see issue #9). `true` (default): chunked streaming, unchanged. `false`: buffers the full response and returns it with an exact `Content-Length` — for strict clients/players that handle chunked transfer or unknown-length WAV headers poorly. |
 
-Unknown fields are silently dropped (clients sending `stream`, `logprobs`, etc. work).
+Unknown fields are silently dropped (clients sending `logprobs`, etc. work).
 
 **Auth:** `Authorization: Bearer <token>` (same provider as WebSocket/Wyoming).
 
-**Response:** 200 OK with the audio streamed chunked:
+**Response:** 200 OK with the audio, either streamed chunked (`stream: true`, default) or fully buffered (`stream: false`):
 - `Content-Type: audio/pcm` for raw PCM16, `audio/wav` for RIFF/WAVE, `audio/mpeg` for MP3, `audio/ogg` for Opus, `audio/aac` for AAC, or `audio/flac` for FLAC.
 - `X-Request-Id`, `X-Model-Used`, `X-Voice-Used`, `X-Speed-Used` headers — the last three reflect the actually resolved/clamped values, not necessarily what was requested.
-- WAV header has `0xFFFFFFFF` length sentinels (standard streaming practice; all modern players handle it).
+- `stream: true` (default): WAV header has `0xFFFFFFFF` length sentinels (standard streaming practice; all modern players handle it) — no `Content-Length` (chunked transfer).
+- `stream: false`: exact `Content-Length`; WAV header carries the real, byte-accurate sizes instead of the sentinel.
 - If `response_format` is `mp3`/`opus`/`aac`/`flac` but ffmpeg isn't installed on the host, returns `503` with error code `audio_format_unavailable` instead of failing to start up.
 
 **Example:**
@@ -672,13 +674,12 @@ Tests are also run automatically via GitHub Actions on every push and pull reque
   - **Fase 6** — OpenAI-compatible `POST /v1/audio/speech`: Bearer auth, PCM16 + WAV output, streaming, OpenAI error envelope (PR #9, 2026-07-06).
   - **`speed` param** (#13) — honored in `POST /v1/audio/speech`, clamped to the resolved engine's native range via `resolve_speed()`.
   - **`GET /v1/voices`** (#14) — ElevenLabs-style voice catalog, auto-discovered from `available_voices()` on the default model.
+  - **`stream: bool`** (#9) — buffered (exact `Content-Length`) response mode for `POST /v1/audio/speech`, alongside the default chunked streaming.
 - **Active directions (GitHub issues):**
   - [#15](https://github.com/Jota-project/jota-speaker/issues/15) — `instructions` field: honor SSML-like voice instructions per request.
-  - [#16](https://github.com/Jota-project/jota-speaker/issues/16) — SSE/Realtime endpoint: OpenAI Realtime-style streaming.
-  - [#17](https://github.com/Jota-project/jota-speaker/issues/17) — configurable bitrate for mp3/opus/aac response formats.
-  - [#18](https://github.com/Jota-project/jota-speaker/issues/18) — investigate true CBR for AAC stream.
+  - [#16](https://github.com/Jota-project/jota-speaker/issues/16) — SSE/Realtime endpoint: OpenAI Realtime-style streaming — questionable given `/ws` and Wyoming already cover interactive/event-based use cases; needs a dedicated spec before any implementation.
+  - [#17](https://github.com/Jota-project/jota-speaker/issues/17) — configurable bitrate for mp3/opus/aac response formats (speculative, no known need yet).
   - [#2](https://github.com/Jota-project/jota-speaker/issues/2) — concurrency control: semaphore for TTS engine.
-  - [#9](https://github.com/Jota-project/jota-speaker/issues/9) — buffered (Content-Length) response mode for `/v1/audio/speech`.
   - **Auth migration**: planning to move from `jota-db` external auth to per-service `TTS_TOKEN` (tracked in [`Jota-project/jota-gateway` issue tracker](https://github.com/Jota-project/jota-gateway/issues)).
   - **Wyoming**: protocol coverage for HA discoverability is complete; expect incremental fixes as HA updates.
   - **Fase 5** — TTFB metrics + barge-in latency histograms: scope TBD.
