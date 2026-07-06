@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 
 from src.auth.stub import StubAuthProvider
 from src.core.config import Settings
+from src.core.engine_registry import EngineRegistry
 from src.core.normalizer_factory import create_normalizer
 from src.main import app
 from src.tts.interface import ITTSEngine
@@ -21,7 +22,7 @@ class CapturingEngine(ITTSEngine):
     def sample_rate(self) -> int:
         return 24000
 
-    async def synthesize(self, text: str):
+    async def synthesize(self, text: str, voice: str | None = None):
         self.received_texts.append(text)
         await asyncio.sleep(0)
         yield b"\x00\x00" * 4800
@@ -36,7 +37,7 @@ def _setup(engine: ITTSEngine, normalizer_settings: dict | None = None) -> TestC
         overrides.update(normalizer_settings)
     settings = Settings(**overrides)
     app.state.settings = settings
-    app.state.engine = engine
+    app.state.engine_registry = EngineRegistry({"test": engine}, "test")
     app.state.auth = StubAuthProvider()
     app.state.normalizer = create_normalizer(settings)
     return TestClient(app)
@@ -84,7 +85,7 @@ def test_session_survives_normalizer_failure():
     engine = CapturingEngine()
     settings = Settings(engine="mock", auth_provider="stub", min_flush_chars=5)
     app.state.settings = settings
-    app.state.engine = engine
+    app.state.engine_registry = EngineRegistry({"test": engine}, "test")
     app.state.auth = StubAuthProvider()
     app.state.normalizer = CrashingNormalizer()
     client = TestClient(app)

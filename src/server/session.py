@@ -8,8 +8,8 @@ from pydantic import ValidationError
 from starlette.websockets import WebSocket, WebSocketDisconnect
 
 from src.auth.interface import IAuthProvider
+from src.core.engine_registry import EngineRegistry
 from src.core.logger import get_logger
-from src.tts.interface import ITTSEngine
 from src.tts.normalizer import INormalizer
 from .accumulator import TokenAccumulator
 from .protocol import (
@@ -44,7 +44,7 @@ class SpeakerSession:
     def __init__(
         self,
         ws: WebSocket,
-        engine: ITTSEngine,
+        registry: EngineRegistry,
         auth: IAuthProvider,
         normalizer: INormalizer,
         min_flush_chars: int = 80,
@@ -52,7 +52,9 @@ class SpeakerSession:
         session_timeout: float = 300.0,
     ) -> None:
         self._ws = ws
-        self._engine = engine
+        self._registry = registry
+        _, self._engine = registry.resolve(None)
+        self._voice: str = ""
         self._auth = auth
         self._normalizer = normalizer
         self._accumulator = TokenAccumulator(min_flush_chars=min_flush_chars)
@@ -123,7 +125,11 @@ class SpeakerSession:
             await self._ws.close(code=1008)
             return False
 
-        await self._send(AuthOkMessage())
+        model_id, engine = self._registry.resolve(msg.model)
+        voice = engine.resolve_voice(msg.voice)
+        self._engine = engine
+        self._voice = voice
+        await self._send(AuthOkMessage(model_used=model_id, voice_used=voice))
         return True
 
     # ── receive loop ──────────────────────────────────────────────────────────
@@ -215,7 +221,7 @@ class SpeakerSession:
                 self._log.warning("Normalizer raised, using original text: %s", exc)
                 normalized = text
             try:
-                async for frame in self._engine.synthesize(normalized):
+                async for frame in self._engine.synthesize(normalized, voice=self._voice):
                     try:
                         await self._ws.send_bytes(frame)
                     except WebSocketDisconnect:

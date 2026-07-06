@@ -22,6 +22,20 @@ def test_parse_auth():
     assert msg.token == "abc123"
 
 
+def test_parse_auth_with_model_and_voice():
+    msg = parse_client_message(
+        json.dumps({"type": "auth", "token": "abc123", "model": "kokoro-fp32", "voice": "em_alex"})
+    )
+    assert msg.model == "kokoro-fp32"
+    assert msg.voice == "em_alex"
+
+
+def test_parse_auth_without_model_and_voice_defaults_to_none():
+    msg = parse_client_message(json.dumps({"type": "auth", "token": "abc123"}))
+    assert msg.model is None
+    assert msg.voice is None
+
+
 # 2. Parse token message
 def test_parse_token():
     msg = parse_client_message(json.dumps({"type": "token", "text": "Hello"}))
@@ -61,9 +75,11 @@ def test_token_missing_text():
 
 # 8. Serialize server messages
 def test_serialize_auth_ok():
-    msg = AuthOkMessage()
+    msg = AuthOkMessage(model_used="mock", voice_used="ef_dora")
     data = json.loads(serialize_server_message(msg))
     assert data["type"] == "auth_ok"
+    assert data["model_used"] == "mock"
+    assert data["voice_used"] == "ef_dora"
 
 
 def test_serialize_auth_error():

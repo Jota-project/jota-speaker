@@ -10,6 +10,7 @@ from unittest.mock import MagicMock
 
 from fastapi.websockets import WebSocketState
 
+from src.core.engine_registry import EngineRegistry
 from src.server.accumulator import TokenAccumulator
 from src.server.session import SpeakerSession
 
@@ -38,7 +39,7 @@ class SlowEngine:
     def sample_rate(self) -> int:
         return self._sample_rate
 
-    async def synthesize(self, text: str):
+    async def synthesize(self, text: str, voice: str | None = None):
         for _ in range(self._frames):
             await asyncio.sleep(0.02)
             yield b"\x00\x00" * 100
@@ -57,7 +58,7 @@ def _make_session(min_flush_chars: int = 5) -> tuple[SpeakerSession, FakeWS, Slo
     engine = SlowEngine()
     session = SpeakerSession(
         ws=ws,
-        engine=engine,
+        registry=EngineRegistry({"mock": engine}, "mock"),
         auth=MagicMock(),
         normalizer=FakeNorm(),
         min_flush_chars=min_flush_chars,

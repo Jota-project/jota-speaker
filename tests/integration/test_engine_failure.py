@@ -6,6 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.auth.stub import StubAuthProvider
+from src.core.engine_registry import EngineRegistry
 from src.core.normalizer_factory import create_normalizer
 from src.core.config import Settings
 from src.main import app
@@ -23,7 +24,7 @@ class CrashingEngine(ITTSEngine):
     def sample_rate(self) -> int:
         return 24000
 
-    async def synthesize(self, text: str):
+    async def synthesize(self, text: str, voice: str | None = None):
         self.calls += 1
         await asyncio.sleep(0)
         raise RuntimeError("simulated Kokoro crash")
@@ -36,7 +37,7 @@ class CrashingEngine(ITTSEngine):
 def _make_client(engine: ITTSEngine) -> TestClient:
     settings = Settings(engine="mock", auth_provider="stub", min_flush_chars=5)
     app.state.settings = settings
-    app.state.engine = engine
+    app.state.engine_registry = EngineRegistry({"test": engine}, "test")
     app.state.auth = StubAuthProvider()
     app.state.normalizer = create_normalizer(settings)
     return TestClient(app)

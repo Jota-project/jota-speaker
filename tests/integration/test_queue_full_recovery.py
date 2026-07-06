@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 from src.auth.stub import StubAuthProvider
 from src.core.normalizer_factory import create_normalizer
 from src.core.config import Settings
-from src.core.engine_factory import create_engine
+from src.core.engine_factory import create_engine_registry
 from src.main import app
 
 
@@ -17,7 +17,7 @@ def test_queue_full_emits_single_error_no_double_done():
         min_flush_chars=2, queue_maxsize=1, session_timeout=5.0,
     )
     app.state.settings = settings
-    app.state.engine = create_engine(settings)
+    app.state.engine_registry = create_engine_registry(settings)
     app.state.auth = StubAuthProvider()
     app.state.normalizer = create_normalizer(settings)
 

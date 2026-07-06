@@ -5,6 +5,7 @@ import time
 from fastapi.testclient import TestClient
 
 from src.auth.stub import StubAuthProvider
+from src.core.engine_registry import EngineRegistry
 from src.core.normalizer_factory import create_normalizer
 from src.core.config import Settings
 from src.main import app
@@ -22,7 +23,7 @@ class HangingEngine(ITTSEngine):
     def sample_rate(self) -> int:
         return 24000
 
-    async def synthesize(self, text: str):
+    async def synthesize(self, text: str, voice: str | None = None):
         loop = asyncio.get_running_loop()
         if self.synthesize_timeout is not None:
             try:
@@ -46,7 +47,7 @@ def _setup(engine: ITTSEngine) -> TestClient:
         min_flush_chars=5, session_timeout=10.0,
     )
     app.state.settings = settings
-    app.state.engine = engine
+    app.state.engine_registry = EngineRegistry({"test": engine}, "test")
     app.state.auth = StubAuthProvider()
     app.state.normalizer = create_normalizer(settings)
     return TestClient(app)
