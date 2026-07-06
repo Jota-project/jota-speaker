@@ -95,16 +95,36 @@ def test_chunk_finished_ok_and_aborted():
 
 
 def test_interrupt_processed_increments_counter_and_histogram():
-    metrics.INTERRUPTS_TOTAL.clear()
+    # INTERRUPTS_TOTAL has no labels, so its own .clear() isn't safe to call
+    # (see _MetricWrapper removal); read a before/after delta instead, same
+    # pattern as test_observe_ttfb_ms_negative_is_dropped.
     metrics.BARGE_IN_LATENCY_HISTOGRAM.clear()
+    before = _counter_value("jota_speaker_interrupts_total")
     interrupt_processed(60.0, session_type="ws")
-    assert _counter_value("jota_speaker_interrupts_total") == 1.0
+    after = _counter_value("jota_speaker_interrupts_total")
+    assert after == before + 1.0
     assert _histogram_count("jota_speaker_barge_in_latency_ms", session_type="ws") == 1.0
 
 
 def test_synthesis_in_flight_gauge():
-    metrics.SYNTHESIS_IN_FLIGHT.clear()
+    # SYNTHESIS_IN_FLIGHT has no labels, so its own .clear() isn't safe to
+    # call; read a before/after delta instead of resetting global state.
+    before = _gauge_value("jota_speaker_engine_synthesis_in_flight")
     synthesis_started()
-    assert _gauge_value("jota_speaker_engine_synthesis_in_flight") == 1.0
+    assert _gauge_value("jota_speaker_engine_synthesis_in_flight") == before + 1.0
     synthesis_finished()
-    assert _gauge_value("jota_speaker_engine_synthesis_in_flight") == 0.0
+    assert _gauge_value("jota_speaker_engine_synthesis_in_flight") == before
+
+
+def test_helper_swallows_exception_from_prometheus_client(monkeypatch):
+    """Instrumentation must never take down production: if the underlying
+    prometheus_client metric raises, the helper must no-op instead of
+    propagating."""
+
+    def _boom(*args, **kwargs):
+        raise RuntimeError("registry exploded")
+
+    monkeypatch.setattr(metrics.ERRORS_TOTAL, "labels", _boom)
+
+    # Must not raise.
+    error_occurred("some_code")
