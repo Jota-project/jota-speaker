@@ -25,10 +25,13 @@ class ITTSEngine(ABC):
         """Release engine resources (thread pools, native handles)."""
         ...
 
-    @abstractmethod
     def list_voices(self) -> list[str]:
-        """List available voice names from the voices pack."""
-        ...
+        """List available voice names from the voices pack.
+
+        Default implementation returns an empty list. Engines that support
+        voice listing override this.
+        """
+        return []
 
     # Optional: engines may set this to bound blocking inference calls.
     # None means no timeout. The session will use this to wrap run_in_executor.
