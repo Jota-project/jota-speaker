@@ -8,11 +8,6 @@ import asyncio
 from unittest.mock import MagicMock
 
 from src.core.engine_registry import EngineRegistry
-from src.server.protocol import (
-    AudioEndMessage,
-    AudioStartMessage,
-    ChunkAbortedMessage,
-)
 from src.server.session import SpeakerSession
 
 

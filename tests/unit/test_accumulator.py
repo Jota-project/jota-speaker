@@ -1,4 +1,3 @@
-import pytest
 from src.server.accumulator import TokenAccumulator
 
 

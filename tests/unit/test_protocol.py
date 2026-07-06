@@ -8,6 +8,7 @@ from src.server.protocol import (
     AudioStartMessage,
     AuthErrorMessage,
     AuthOkMessage,
+    ChunkAbortedMessage,
     DoneMessage,
     ErrorMessage,
     parse_client_message,
@@ -116,9 +117,6 @@ def test_serialize_error():
     data = json.loads(serialize_server_message(msg))
     assert data["type"] == "error"
     assert data["code"] == "oops"
-
-
-from src.server.protocol import ChunkAbortedMessage
 
 
 def test_serialize_chunk_aborted():

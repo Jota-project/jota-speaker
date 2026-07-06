@@ -1,4 +1,3 @@
-import asyncio
 import pytest
 
 from src.tts.interface import ITTSEngine
