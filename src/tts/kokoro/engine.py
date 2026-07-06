@@ -47,18 +47,21 @@ class KokoroEngine(ITTSEngine):
     def sample_rate(self) -> int:
         return self._sample_rate
 
-    async def synthesize(self, text: str) -> AsyncIterator[bytes]:
+    async def synthesize(self, text: str, voice: str | None = None) -> AsyncIterator[bytes]:
         loop = asyncio.get_running_loop()
+        resolved_voice = voice or self._voice
         async with self._inference_lock:
             try:
                 if self.synthesize_timeout is not None:
                     audio: np.ndarray = await asyncio.wait_for(
-                        loop.run_in_executor(self._executor, self._run_inference, text),
+                        loop.run_in_executor(
+                            self._executor, self._run_inference, text, resolved_voice
+                        ),
                         timeout=self.synthesize_timeout,
                     )
                 else:
                     audio = await loop.run_in_executor(
-                        self._executor, self._run_inference, text
+                        self._executor, self._run_inference, text, resolved_voice
                     )
             except asyncio.TimeoutError:
                 logger.error("Kokoro inference timed out after %.2fs", self.synthesize_timeout)
@@ -69,11 +72,18 @@ class KokoroEngine(ITTSEngine):
             pcm16 = (chunk * 32767).astype(np.int16).tobytes()
             yield pcm16
 
+    @property
+    def default_voice(self) -> str:
+        return self._voice
+
+    def available_voices(self) -> list[str] | None:
+        return self._kokoro.get_voices()
+
     # ── sync (runs in dedicated thread pool) ─────────────────────────────────
 
-    def _run_inference(self, text: str) -> np.ndarray:
+    def _run_inference(self, text: str, voice: str) -> np.ndarray:
         samples, _ = self._kokoro.create(
-            text, voice=self._voice, speed=1.0, lang=self._lang
+            text, voice=voice, speed=1.0, lang=self._lang
         )
         return samples.astype(np.float32)
 
