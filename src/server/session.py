@@ -11,7 +11,7 @@ from starlette.websockets import WebSocket, WebSocketDisconnect
 from src.auth.interface import IAuthProvider
 from src.core.engine_registry import EngineRegistry
 from src.core.logger import get_logger
-from src.observability.metrics import error_occurred, observe_ttfb_ms
+from src.observability.metrics import chunk_finished, error_occurred, observe_ttfb_ms
 from src.tts.normalizer import INormalizer
 from .accumulator import TokenAccumulator
 from .protocol import (
@@ -236,14 +236,17 @@ class SpeakerSession:
                         await self._ws.send_bytes(frame)
                     except WebSocketDisconnect:
                         await self._send(ChunkAbortedMessage(chunk_id=chunk_id))
+                        chunk_finished(aborted=True)
                         return
             except asyncio.CancelledError:
                 # Barge-in in progress: _handle_interrupt will read _current_chunk_id.
                 raise
             except WebSocketDisconnect:
                 await self._send(ChunkAbortedMessage(chunk_id=chunk_id))
+                chunk_finished(aborted=True)
                 return
             await self._send(AudioEndMessage(chunk_id=chunk_id))
+            chunk_finished(aborted=False)
         finally:
             self._current_chunk_id = None
 
@@ -280,6 +283,7 @@ class SpeakerSession:
                 await self._send(ChunkAbortedMessage(chunk_id=aborted_id))
             except Exception:
                 pass
+            chunk_finished(aborted=True)
         try:
             await self._send(InterruptedMessage(chunk_id=aborted_id or 0))
         except Exception:
