@@ -9,6 +9,8 @@ from pydantic import BaseModel, ValidationError
 class AuthMessage(BaseModel):
     type: Literal["auth"]
     token: str
+    model: str | None = None
+    voice: str | None = None
 
 
 class TokenMessage(BaseModel):
@@ -65,6 +67,8 @@ def parse_client_message(raw: str) -> ClientMessage:
 
 class AuthOkMessage(BaseModel):
     type: Literal["auth_ok"] = "auth_ok"
+    model_used: str
+    voice_used: str
 
 
 class AuthErrorMessage(BaseModel):

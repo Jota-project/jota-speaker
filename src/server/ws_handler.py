@@ -15,7 +15,7 @@ async def websocket_endpoint(ws: WebSocket) -> None:
     state = ws.app.state
     session = SpeakerSession(
         ws=ws,
-        engine=state.engine,
+        registry=state.engine_registry,
         auth=state.auth,
         normalizer=state.normalizer,
         min_flush_chars=state.settings.min_flush_chars,

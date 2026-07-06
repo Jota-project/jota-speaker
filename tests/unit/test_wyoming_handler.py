@@ -8,6 +8,24 @@ from src.tts.mock_engine import MockEngine
 from src.wyoming.handler import WyomingHandler
 
 
+class _VoiceCapturingEngine(MockEngine):
+    def __init__(self, *a, **kw) -> None:
+        super().__init__(*a, **kw)
+        self.received_voices: list[str | None] = []
+
+    def available_voices(self):
+        return ["ef_dora", "em_alex"]
+
+    @property
+    def default_voice(self):
+        return "ef_dora"
+
+    async def synthesize(self, text: str, voice: str | None = None):
+        self.received_voices.append(voice)
+        async for frame in super().synthesize(text, voice=voice):
+            yield frame
+
+
 class _FakeWriter:
     def __init__(self):
         self.data = bytearray()
@@ -126,7 +144,7 @@ async def test_engine_exception_does_not_crash_handler():
         def sample_rate(self) -> int:
             return 24000
 
-        async def synthesize(self, text: str) -> AsyncIterator[bytes]:
+        async def synthesize(self, text: str, voice: str | None = None) -> AsyncIterator[bytes]:
             raise RuntimeError("engine failure")
             yield  # make it an async generator
 
@@ -137,4 +155,78 @@ async def test_engine_exception_does_not_crash_handler():
     writer = _FakeWriter()
     await handler.handle(_reader_with_synthesize("Hello"), writer)
     # Should complete without raising, writer should be closed
+    assert writer.closed
+
+
+async def test_synthesize_with_voice_override_uses_requested_voice():
+    engine = _VoiceCapturingEngine(sample_rate=24000)
+    handler = WyomingHandler(engine, Settings(engine="mock"))
+    writer = _FakeWriter()
+    line = json.dumps({"type": "synthesize", "data": {"text": "Hola", "voice": {"name": "em_alex"}}}) + "\n"
+    r = asyncio.StreamReader()
+    r.feed_data(line.encode())
+    r.feed_eof()
+    await handler.handle(r, writer)
+    assert engine.received_voices == ["em_alex"]
+
+
+async def test_synthesize_with_unloaded_voice_falls_back_to_default():
+    engine = _VoiceCapturingEngine(sample_rate=24000)
+    handler = WyomingHandler(engine, Settings(engine="mock"))
+    writer = _FakeWriter()
+    line = json.dumps({"type": "synthesize", "data": {"text": "Hola", "voice": {"name": "nonexistent"}}}) + "\n"
+    r = asyncio.StreamReader()
+    r.feed_data(line.encode())
+    r.feed_eof()
+    await handler.handle(r, writer)
+    assert engine.received_voices == ["ef_dora"]
+
+
+async def test_synthesize_without_voice_uses_default():
+    engine = _VoiceCapturingEngine(sample_rate=24000)
+    handler = WyomingHandler(engine, Settings(engine="mock"))
+    writer = _FakeWriter()
+    await handler.handle(_reader_with_synthesize("Hola"), writer)
+    assert engine.received_voices == ["ef_dora"]
+
+
+async def test_describe_lists_all_available_voices():
+    engine = _VoiceCapturingEngine(sample_rate=24000)
+    handler = WyomingHandler(engine, Settings(engine="mock", kokoro_lang="es"))
+    writer = _FakeWriter()
+    line = json.dumps({"type": "describe"}) + "\n"
+    r = asyncio.StreamReader()
+    r.feed_data(line.encode())
+    r.feed_eof()
+    await handler.handle(r, writer)
+    events = writer.parse_events()
+    voices = events[0][1]["tts"][0]["voices"]
+    assert {v["name"] for v in voices} == {"ef_dora", "em_alex"}
+
+
+async def test_synthesize_with_voice_null_falls_back_to_default():
+    """Test that voice: null does not crash the handler and falls back to default."""
+    engine = _VoiceCapturingEngine(sample_rate=24000)
+    handler = WyomingHandler(engine, Settings(engine="mock"))
+    writer = _FakeWriter()
+    line = json.dumps({"type": "synthesize", "data": {"text": "Hola", "voice": None}}) + "\n"
+    r = asyncio.StreamReader()
+    r.feed_data(line.encode())
+    r.feed_eof()
+    await handler.handle(r, writer)
+    assert engine.received_voices == ["ef_dora"]
+    assert writer.closed
+
+
+async def test_synthesize_with_voice_string_falls_back_to_default():
+    """Test that voice as a bare string does not crash the handler and falls back to default."""
+    engine = _VoiceCapturingEngine(sample_rate=24000)
+    handler = WyomingHandler(engine, Settings(engine="mock"))
+    writer = _FakeWriter()
+    line = json.dumps({"type": "synthesize", "data": {"text": "Hola", "voice": "em_alex"}}) + "\n"
+    r = asyncio.StreamReader()
+    r.feed_data(line.encode())
+    r.feed_eof()
+    await handler.handle(r, writer)
+    assert engine.received_voices == ["ef_dora"]
     assert writer.closed

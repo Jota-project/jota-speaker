@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 
 from src.auth.stub import StubAuthProvider
 from src.core.config import Settings
+from src.core.engine_registry import EngineRegistry
 from src.core.normalizer_factory import create_normalizer
 from src.main import app
 from src.tts.interface import ITTSEngine
@@ -21,7 +22,7 @@ class SlowFrameEngine(ITTSEngine):
     def sample_rate(self) -> int:
         return 24000
 
-    async def synthesize(self, text: str):
+    async def synthesize(self, text: str, voice: str | None = None):
         for _ in range(10):
             await asyncio.sleep(0.05)
             yield b"\x00\x00" * 4800
@@ -35,7 +36,7 @@ def _setup(engine: ITTSEngine, **kwargs) -> TestClient:
     defaults.update(kwargs)
     settings = Settings(**defaults)
     app.state.settings = settings
-    app.state.engine = engine
+    app.state.engine_registry = EngineRegistry({"test": engine}, "test")
     app.state.auth = StubAuthProvider()
     app.state.normalizer = create_normalizer(settings)
     return TestClient(app)

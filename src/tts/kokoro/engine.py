@@ -47,18 +47,32 @@ class KokoroEngine(ITTSEngine):
     def sample_rate(self) -> int:
         return self._sample_rate
 
-    async def synthesize(self, text: str) -> AsyncIterator[bytes]:
+    async def synthesize(
+        self, text: str, voice: str | None = None, speed: float | None = None
+    ) -> AsyncIterator[bytes]:
         loop = asyncio.get_running_loop()
+        resolved_voice = voice or self._voice
+        resolved_speed = self.resolve_speed(speed)
         async with self._inference_lock:
             try:
                 if self.synthesize_timeout is not None:
                     audio: np.ndarray = await asyncio.wait_for(
-                        loop.run_in_executor(self._executor, self._run_inference, text),
+                        loop.run_in_executor(
+                            self._executor,
+                            self._run_inference,
+                            text,
+                            resolved_voice,
+                            resolved_speed,
+                        ),
                         timeout=self.synthesize_timeout,
                     )
                 else:
                     audio = await loop.run_in_executor(
-                        self._executor, self._run_inference, text
+                        self._executor,
+                        self._run_inference,
+                        text,
+                        resolved_voice,
+                        resolved_speed,
                     )
             except asyncio.TimeoutError:
                 logger.error("Kokoro inference timed out after %.2fs", self.synthesize_timeout)
@@ -69,11 +83,27 @@ class KokoroEngine(ITTSEngine):
             pcm16 = (chunk * 32767).astype(np.int16).tobytes()
             yield pcm16
 
+    @property
+    def default_voice(self) -> str:
+        return self._voice
+
+    def available_voices(self) -> list[str] | None:
+        return self._kokoro.get_voices()
+
+    # Kokoro's create() asserts 0.5 <= speed <= 2.0 and raises outside it.
+    _MIN_SPEED = 0.5
+    _MAX_SPEED = 2.0
+
+    def resolve_speed(self, requested: float | None) -> float:
+        if requested is None:
+            return 1.0
+        return max(self._MIN_SPEED, min(self._MAX_SPEED, requested))
+
     # ── sync (runs in dedicated thread pool) ─────────────────────────────────
 
-    def _run_inference(self, text: str) -> np.ndarray:
+    def _run_inference(self, text: str, voice: str, speed: float) -> np.ndarray:
         samples, _ = self._kokoro.create(
-            text, voice=self._voice, speed=1.0, lang=self._lang
+            text, voice=voice, speed=speed, lang=self._lang
         )
         return samples.astype(np.float32)
 

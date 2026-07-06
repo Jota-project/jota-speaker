@@ -7,6 +7,7 @@ and a fake engine (synchronously yields frames).
 import asyncio
 from unittest.mock import MagicMock
 
+from src.core.engine_registry import EngineRegistry
 from src.server.protocol import (
     AudioEndMessage,
     AudioStartMessage,
@@ -46,7 +47,7 @@ class FakeEngine:
     def sample_rate(self) -> int:
         return self._sample_rate
 
-    async def synthesize(self, text: str):
+    async def synthesize(self, text: str, voice: str | None = None):
         for f in self._frames:
             yield f
 
@@ -66,7 +67,7 @@ def _make_session(frames: list[bytes]) -> tuple[SpeakerSession, FakeWS, FakeEngi
     normalizer = FakeNormalizer()
     session = SpeakerSession(
         ws=ws,
-        engine=engine,
+        registry=EngineRegistry({"mock": engine}, "mock"),
         auth=auth,
         normalizer=normalizer,
         min_flush_chars=80,

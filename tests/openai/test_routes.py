@@ -12,6 +12,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from src.auth.stub import StubAuthProvider
+from src.core.engine_registry import EngineRegistry
 from src.openai.routes import register_exception_handlers, router as openai_router
 from src.tts.mock_engine import MockEngine
 from src.tts.normalizer import PassThroughNormalizer
@@ -21,7 +22,7 @@ from src.tts.normalizer import PassThroughNormalizer
 def app():
     """Build a minimal FastAPI app mirroring src.main lifespan state."""
     app = FastAPI()
-    app.state.engine = MockEngine(sample_rate=24000)
+    app.state.engine_registry = EngineRegistry({"mock": MockEngine(sample_rate=24000)}, "mock")
     app.state.auth = StubAuthProvider()
     app.state.normalizer = PassThroughNormalizer()
 
@@ -170,15 +171,15 @@ class TestResponseHeaders:
         )
         assert resp.headers["x-model-used"] == "mock"
 
-    def test_x_voice_used_echoes_engine_setting(self, app):
+    def test_x_voice_used_honors_requested_voice(self, app):
         client = TestClient(app)
         resp = client.post(
             "/v1/audio/speech",
             headers={"Authorization": "Bearer t"},
             json={"model": "tts-1", "input": "hola", "voice": "shimmer"},
         )
-        # MVP ignores voice from request, echoes the engine setting
-        assert resp.headers["x-voice-used"] == "ef_dora"
+        # Fase 3: mock has no voice restriction, so the requested voice is honored.
+        assert resp.headers["x-voice-used"] == "shimmer"
 
     def test_cache_control_no_store(self, app):
         client = TestClient(app)
@@ -235,3 +236,39 @@ class TestFfmpegFormats:
         )
         assert resp.status_code == 503
         assert resp.json()["error"]["code"] == "audio_format_unavailable"
+
+
+class _VoicedEngine(MockEngine):
+    def available_voices(self):
+        return ["ef_dora", "em_alex", "em_santa"]
+
+
+class TestListVoices:
+    def test_requires_auth(self, app):
+        client = TestClient(app)
+        resp = client.get("/v1/voices")
+        assert resp.status_code == 401
+
+    def test_no_voices_loaded_returns_empty_list(self, app):
+        client = TestClient(app)
+        resp = client.get("/v1/voices", headers={"Authorization": "Bearer t"})
+        assert resp.status_code == 200
+        assert resp.json() == {"voices": []}
+
+    def test_lists_all_voices_from_default_model(self, app):
+        app.state.engine_registry = EngineRegistry(
+            {"mock": _VoicedEngine(sample_rate=24000)}, "mock"
+        )
+        client = TestClient(app)
+        resp = client.get("/v1/voices", headers={"Authorization": "Bearer t"})
+        assert resp.status_code == 200
+        body = resp.json()
+        assert {v["voice_id"] for v in body["voices"]} == {"ef_dora", "em_alex", "em_santa"}
+        assert all(v["voice_id"] == v["name"] for v in body["voices"])
+
+    def test_engine_unavailable_returns_503(self, app):
+        app.state.engine_registry = None
+        client = TestClient(app)
+        resp = client.get("/v1/voices", headers={"Authorization": "Bearer t"})
+        assert resp.status_code == 503
+        assert resp.json()["error"]["code"] == "engine_unavailable"

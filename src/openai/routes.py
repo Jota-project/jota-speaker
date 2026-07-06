@@ -1,7 +1,7 @@
-"""FastAPI router for POST /v1/audio/speech.
+"""FastAPI router for POST /v1/audio/speech and GET /v1/voices.
 
-Single endpoint. Three exception handlers translate the OpenAI-style
-exception classes (defined in src.openai.protocol) to JSON envelopes.
+Exception handlers translate the OpenAI-style exception classes (defined in
+src.openai.protocol) to JSON envelopes.
 
 Stream-end cleanup is intentionally not done in handlers — by the time
 a 200 response is committed, any subsequent failure only truncates the
@@ -22,8 +22,9 @@ from src.openai.protocol import (
     OpenAIBadRequestError,
     OpenAIEngineError,
     SpeechRequest,
+    VoicesListResponse,
 )
-from src.openai.service import handle_speech_request
+from src.openai.service import handle_list_voices, handle_speech_request
 
 
 router = APIRouter()
@@ -35,6 +36,11 @@ async def audio_speech(
     http_request: Request,
 ) -> object:  # StreamingResponse (avoid circular import for type hints)
     return await handle_speech_request(request_body, http_request)
+
+
+@router.get("/v1/voices")
+async def list_voices(http_request: Request) -> VoicesListResponse:
+    return await handle_list_voices(http_request)
 
 
 # ── Exception handlers ───────────────────────────────────────────────────────

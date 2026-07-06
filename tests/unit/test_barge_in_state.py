@@ -6,6 +6,7 @@ without a real WebSocket — we substitute a mock WS object so we can call __ini
 
 from unittest.mock import MagicMock
 
+from src.core.engine_registry import EngineRegistry
 from src.server.session import SpeakerSession
 
 
@@ -31,7 +32,7 @@ def _make_session() -> SpeakerSession:
     normalizer.normalize = _normalize
     return SpeakerSession(
         ws=ws,
-        engine=engine,
+        registry=EngineRegistry({"mock": engine}, "mock"),
         auth=auth,
         normalizer=normalizer,
         min_flush_chars=80,

@@ -4,7 +4,7 @@ from fastapi import FastAPI
 
 from src.auth import create_auth_provider
 from src.core.config import Settings, get_settings
-from src.core.engine_factory import create_engine
+from src.core.engine_factory import create_engine_registry
 from src.core.logger import get_logger
 from src.core.normalizer_factory import create_normalizer
 
@@ -21,7 +21,7 @@ async def lifespan(app: FastAPI):
         settings.wyoming_enabled,
     )
     app.state.settings = settings
-    app.state.engine = create_engine(settings)
+    app.state.engine_registry = create_engine_registry(settings)
     app.state.auth = create_auth_provider(settings)
 
     from src.openai.encoder import ffmpeg_available
@@ -33,7 +33,8 @@ async def lifespan(app: FastAPI):
     if settings.wyoming_enabled:
         from src.wyoming.server import WyomingServer
 
-        wyoming = WyomingServer(settings, app.state.engine)
+        _, default_engine = app.state.engine_registry.resolve(None)
+        wyoming = WyomingServer(settings, default_engine)
         await wyoming.start()
         app.state.wyoming_server = wyoming
 
@@ -45,9 +46,9 @@ async def lifespan(app: FastAPI):
 
     logger.info("Shutting down jota-speaker")
     try:
-        await app.state.engine.aclose()
+        await app.state.engine_registry.aclose()
     except Exception as exc:
-        logger.warning("Engine aclose on shutdown failed: %s", exc)
+        logger.warning("Engine registry aclose on shutdown failed: %s", exc)
 
 
 app = FastAPI(title="jota-speaker", lifespan=lifespan)
