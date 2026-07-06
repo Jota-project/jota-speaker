@@ -25,8 +25,10 @@ class SpeechRequest(BaseModel):
 
     Matches the OpenAI TTS request shape at the wire level. `model`/`voice`
     are resolved against the loaded EngineRegistry (Fase 3) — unknown values
-    fall back to the configured default rather than erroring. `speed` and
-    `instructions` are still validated but ignored; clients sending
+    fall back to the configured default rather than erroring. `speed` is
+    clamped to whatever range the resolved engine supports (Kokoro: 0.5-2.0)
+    via `ITTSEngine.resolve_speed()` — never rejected, just clamped.
+    `instructions` is still validated but ignored; clients sending
     arbitrary values do not get a 4xx — only nonsense values (empty
     strings, out-of-range speed) are rejected.
     """
@@ -53,6 +55,18 @@ class SpeechRequest(BaseModel):
         if not (0.25 <= v <= 4.0):
             raise ValueError("must be between 0.25 and 4.0")
         return v
+
+
+# ── Voice list (ElevenLabs-style GET /v1/voices, see issue #14) ──────────────
+
+
+class VoiceObject(BaseModel):
+    voice_id: str
+    name: str
+
+
+class VoicesListResponse(BaseModel):
+    voices: list[VoiceObject]
 
 
 # ── Error envelope ───────────────────────────────────────────────────────────

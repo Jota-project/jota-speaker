@@ -282,3 +282,61 @@ class TestModelVoiceSelection:
             json={"model": "nonexistent", "input": "hola"},
         )
         assert resp.headers["x-model-used"] == "mock"
+
+
+class _ClampedSpeedEngine(MockEngine):
+    """Mimics KokoroEngine's 0.5-2.0 native speed range."""
+
+    def resolve_speed(self, requested):
+        if requested is None:
+            return 1.0
+        return max(0.5, min(2.0, requested))
+
+
+class TestSpeedSelection:
+    def test_default_speed_used_when_omitted(self, app_with_engine_and_stub_auth):
+        client = TestClient(app_with_engine_and_stub_auth)
+        resp = client.post(
+            "/v1/audio/speech",
+            headers={"Authorization": "Bearer t"},
+            json={"model": "tts-1", "input": "hola"},
+        )
+        assert resp.headers["x-speed-used"] == "1.0"
+
+    def test_speed_within_engine_range_is_honored(self, app_with_engine_and_stub_auth):
+        app_with_engine_and_stub_auth.state.engine_registry = EngineRegistry(
+            {"mock": _ClampedSpeedEngine(sample_rate=24000)}, "mock"
+        )
+        client = TestClient(app_with_engine_and_stub_auth)
+        resp = client.post(
+            "/v1/audio/speech",
+            headers={"Authorization": "Bearer t"},
+            json={"model": "tts-1", "input": "hola", "speed": 1.5},
+        )
+        assert resp.headers["x-speed-used"] == "1.5"
+
+    def test_speed_above_engine_range_is_clamped(self, app_with_engine_and_stub_auth):
+        app_with_engine_and_stub_auth.state.engine_registry = EngineRegistry(
+            {"mock": _ClampedSpeedEngine(sample_rate=24000)}, "mock"
+        )
+        client = TestClient(app_with_engine_and_stub_auth)
+        resp = client.post(
+            "/v1/audio/speech",
+            headers={"Authorization": "Bearer t"},
+            json={"model": "tts-1", "input": "hola", "speed": 4.0},
+        )
+        assert resp.status_code == 200
+        assert resp.headers["x-speed-used"] == "2.0"
+
+    def test_speed_below_engine_range_is_clamped(self, app_with_engine_and_stub_auth):
+        app_with_engine_and_stub_auth.state.engine_registry = EngineRegistry(
+            {"mock": _ClampedSpeedEngine(sample_rate=24000)}, "mock"
+        )
+        client = TestClient(app_with_engine_and_stub_auth)
+        resp = client.post(
+            "/v1/audio/speech",
+            headers={"Authorization": "Bearer t"},
+            json={"model": "tts-1", "input": "hola", "speed": 0.25},
+        )
+        assert resp.status_code == 200
+        assert resp.headers["x-speed-used"] == "0.5"

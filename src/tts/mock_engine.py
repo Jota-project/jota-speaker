@@ -21,7 +21,9 @@ class MockEngine(ITTSEngine):
     def sample_rate(self) -> int:
         return self._sample_rate
 
-    async def synthesize(self, text: str, voice: str | None = None) -> AsyncIterator[bytes]:
+    async def synthesize(
+        self, text: str, voice: str | None = None, speed: float | None = None
+    ) -> AsyncIterator[bytes]:
         frames = max(1, len(text) * _FRAMES_PER_CHAR)
         for _ in range(frames):
             await asyncio.sleep(0)  # yield control

@@ -41,6 +41,7 @@ Default voice: **ef_dora** (Spanish, female). Default language: **es**.
 5. [HTTP endpoints](#http-endpoints)
    - [`GET /health`](#get-health)
    - [`POST /v1/audio/speech`](#post-v1audiospeech)
+   - [`GET /v1/voices`](#get-v1voices)
 6. [Configuration](#configuration)
 7. [Wyoming protocol (Home Assistant)](#wyoming-protocol-home-assistant)
 8. [Running with Docker](#running-with-docker)
@@ -492,7 +493,7 @@ request and response shape.
 | `input` | string | yes | — | 1–4096 chars. |
 | `voice` | string | no | `"alloy"` | Falls back to the default voice if unknown or not loaded (e.g. OpenAI's own `"alloy"`/`"shimmer"` names won't match a Kokoro voice). |
 | `response_format` | string | no | `"wav"` | Supports `"pcm"`, `"wav"`, `"mp3"`, `"opus"`, `"aac"`, and `"flac"` (64 kbps CBR mono for mp3/opus/aac, lossless for flac; all via ffmpeg). Other values return 400. |
-| `speed` | float | no | `1.0` | Range `0.25..4.0`. Validated, ignored in MVP. |
+| `speed` | float | no | `1.0` | Range `0.25..4.0` (Pydantic-validated). Clamped to whatever the resolved engine natively supports (Kokoro: `0.5..2.0`) via `resolve_speed()` — never rejected, just clamped. |
 | `instructions` | string | no | `null` | Accepted, ignored in MVP. |
 
 Unknown fields are silently dropped (clients sending `stream`, `logprobs`, etc. work).
@@ -501,7 +502,7 @@ Unknown fields are silently dropped (clients sending `stream`, `logprobs`, etc. 
 
 **Response:** 200 OK with the audio streamed chunked:
 - `Content-Type: audio/pcm` for raw PCM16, `audio/wav` for RIFF/WAVE, `audio/mpeg` for MP3, `audio/ogg` for Opus, `audio/aac` for AAC, or `audio/flac` for FLAC.
-- `X-Request-Id`, `X-Model-Used`, `X-Voice-Used` headers.
+- `X-Request-Id`, `X-Model-Used`, `X-Voice-Used`, `X-Speed-Used` headers — the last three reflect the actually resolved/clamped values, not necessarily what was requested.
 - WAV header has `0xFFFFFFFF` length sentinels (standard streaming practice; all modern players handle it).
 - If `response_format` is `mp3`/`opus`/`aac`/`flac` but ffmpeg isn't installed on the host, returns `503` with error code `audio_format_unavailable` instead of failing to start up.
 
@@ -511,10 +512,30 @@ Unknown fields are silently dropped (clients sending `stream`, `logprobs`, etc. 
 curl -X POST http://localhost:8005/v1/audio/speech \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"model":"tts-1","input":"Hola mundo","voice":"alloy","response_format":"wav"}' \
+  -d '{"model":"tts-1","input":"Hola mundo","voice":"alloy","speed":1.2,"response_format":"wav"}' \
   --output output.wav
 
 ffplay output.wav
+```
+
+### `GET /v1/voices`
+
+Lists the voices loaded on the default model (ElevenLabs-style; all discovered
+Kokoro model variants share the same voices file, so the default model's
+catalog is authoritative — see [Configuration](#configuration)).
+
+**Auth:** `Authorization: Bearer <token>` (same provider as `/v1/audio/speech`).
+
+**Response:** `200 OK`:
+
+```json
+{"voices": [{"voice_id": "ef_dora", "name": "ef_dora"}, {"voice_id": "em_alex", "name": "em_alex"}, ...]}
+```
+
+**Example:**
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8005/v1/voices
 ```
 
 **Errors:** JSON in OpenAI error envelope format:
@@ -649,9 +670,9 @@ Tests are also run automatically via GitHub Actions on every push and pull reque
   - **Fase 3** — model/voice runtime selection: clients can request `model`/`voice` over HTTP, WebSocket (`auth` message), and Wyoming (voice only); unloaded values fall back silently to the configured default (see [spec](docs/superpowers/specs/2026-07-04-fase-3-model-voice-selection-design.md)).
   - **Fase 4** — barge-in: in-session `interrupt` (PR #6, 2026-07-02).
   - **Fase 6** — OpenAI-compatible `POST /v1/audio/speech`: Bearer auth, PCM16 + WAV output, streaming, OpenAI error envelope (PR #9, 2026-07-06).
+  - **`speed` param** (#13) — honored in `POST /v1/audio/speech`, clamped to the resolved engine's native range via `resolve_speed()`.
+  - **`GET /v1/voices`** (#14) — ElevenLabs-style voice catalog, auto-discovered from `available_voices()` on the default model.
 - **Active directions (GitHub issues):**
-  - [#13](https://github.com/Jota-project/jota-speaker/issues/13) — `speed` param: honor `speed` in `POST /v1/audio/speech`.
-  - [#14](https://github.com/Jota-project/jota-speaker/issues/14) — `GET /v1/voices` endpoint (ElevenLabs-style, auto-discovery from `voices-v1.0.bin`).
   - [#15](https://github.com/Jota-project/jota-speaker/issues/15) — `instructions` field: honor SSML-like voice instructions per request.
   - [#16](https://github.com/Jota-project/jota-speaker/issues/16) — SSE/Realtime endpoint: OpenAI Realtime-style streaming.
   - [#17](https://github.com/Jota-project/jota-speaker/issues/17) — configurable bitrate for mp3/opus/aac response formats.

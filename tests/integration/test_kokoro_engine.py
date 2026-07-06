@@ -120,3 +120,44 @@ async def test_synthesize_passes_resolved_voice_to_kokoro_create(fake_kokoro):
     async for _ in eng.synthesize("hola", voice="em_alex"):
         break
     assert calls == ["em_alex"]
+
+
+def test_resolve_speed_defaults_to_one_when_none(fake_kokoro):
+    eng = KokoroEngine(model_path="x", voices_path="y", synthesize_timeout=None)
+    assert eng.resolve_speed(None) == 1.0
+
+
+@pytest.mark.parametrize(
+    "requested,expected",
+    [
+        (1.0, 1.0),
+        (0.5, 0.5),
+        (2.0, 2.0),
+        (0.25, 0.5),  # below Kokoro's native floor -> clamped up
+        (4.0, 2.0),  # above Kokoro's native ceiling -> clamped down
+    ],
+)
+def test_resolve_speed_clamps_to_kokoro_native_range(fake_kokoro, requested, expected):
+    eng = KokoroEngine(model_path="x", voices_path="y", synthesize_timeout=None)
+    assert eng.resolve_speed(requested) == expected
+
+
+@pytest.mark.asyncio
+async def test_synthesize_passes_resolved_speed_to_kokoro_create(fake_kokoro):
+    calls = []
+    original_create = fake_kokoro.create
+
+    def recording_create(text, voice=None, speed=None, lang=None):
+        calls.append(speed)
+        return original_create(text, voice=voice, speed=speed, lang=lang)
+
+    fake_kokoro.create = recording_create
+    eng = KokoroEngine(model_path="x", voices_path="y", synthesize_timeout=None)
+
+    async for _ in eng.synthesize("hola", speed=4.0):  # out of range, must clamp
+        break
+    assert calls == [2.0]
+
+    async for _ in eng.synthesize("hola"):  # no speed requested -> default 1.0
+        break
+    assert calls == [2.0, 1.0]

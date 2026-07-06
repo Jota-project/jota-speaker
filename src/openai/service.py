@@ -3,13 +3,14 @@
 Orchestrates: Bearer extraction → IAuthProvider.validate → input validation
 → normalization → engine.synthesize → encoder wrapping → StreamingResponse.
 
-Reads from app.state (set by FastAPI lifespan): engine, auth, normalizer,
-settings. Logs each request with a 12-char hex request_id for correlation
+Reads from app.state (set by FastAPI lifespan): engine_registry, auth,
+normalizer. Logs each request with a 12-char hex request_id for correlation
 with the X-Request-Id response header.
 
 Public surface:
 - extract_bearer_token(authorization) -> Optional[str]
 - handle_speech_request(request_body, http_request) -> StreamingResponse
+- handle_list_voices(http_request) -> VoicesListResponse
 
 Errors are raised as exceptions (defined in protocol.py) and translated
 to JSON envelopes by FastAPI exception handlers in routes.py.
@@ -31,6 +32,8 @@ from src.openai.protocol import (
     OpenAIBadRequestError,
     OpenAIEngineError,
     SpeechRequest,
+    VoiceObject,
+    VoicesListResponse,
 )
 
 
@@ -79,6 +82,30 @@ def _new_request_id() -> str:
     return uuid.uuid4().hex[:12]
 
 
+async def _authenticate(http_request: Request) -> None:
+    """Extract and validate the Bearer token via app.state.auth.
+
+    Raises OpenAIAuthError (401) or OpenAIEngineError (auth_provider_error)
+    on failure; returns None on success.
+    """
+    state = http_request.app.state
+    token = extract_bearer_token(_auth_header(http_request))
+    if token is None:
+        raise OpenAIAuthError("Missing or malformed Authorization header")
+
+    try:
+        valid = await state.auth.validate(token)
+    except Exception as exc:  # network / provider failure
+        _log.error("auth provider raised: %s", exc)
+        raise OpenAIEngineError(
+            code="auth_provider_error",
+            message="Auth provider unavailable",
+        )
+
+    if not valid:
+        raise OpenAIAuthError("Invalid API key")
+
+
 # ── Main service entry point ────────────────────────────────────────────────
 
 
@@ -107,21 +134,7 @@ async def handle_speech_request(
     state = http_request.app.state
 
     # ── 1. Auth ──────────────────────────────────────────────────────────────
-    token = extract_bearer_token(_auth_header(http_request))
-    if token is None:
-        raise OpenAIAuthError("Missing or malformed Authorization header")
-
-    try:
-        valid = await state.auth.validate(token)
-    except Exception as exc:  # network / provider failure
-        _log.error("auth provider raised: %s", exc)
-        raise OpenAIEngineError(
-            code="auth_provider_error",
-            message="Auth provider unavailable",
-        )
-
-    if not valid:
-        raise OpenAIAuthError("Invalid API key")
+    await _authenticate(http_request)
 
     # ── 2. Post-Pydantic validation ──────────────────────────────────────────
     if not request_body.input.strip():
@@ -140,13 +153,15 @@ async def handle_speech_request(
         )
     model_id, engine = registry.resolve(request_body.model)
     voice_used = engine.resolve_voice(request_body.voice)
+    speed_used = engine.resolve_speed(request_body.speed)
     request_id = _new_request_id()
 
     _log.info(
-        "speech_start request_id=%s model=%s voice=%s chars=%d format=%s",
+        "speech_start request_id=%s model=%s voice=%s speed=%s chars=%d format=%s",
         request_id,
         model_id,
         voice_used,
+        speed_used,
         len(request_body.input),
         request_body.response_format,
     )
@@ -168,7 +183,9 @@ async def handle_speech_request(
         )
 
     try:
-        engine_stream: AsyncIterator[bytes] = engine.synthesize(normalized, voice=voice_used)
+        engine_stream: AsyncIterator[bytes] = engine.synthesize(
+            normalized, voice=voice_used, speed=speed_used
+        )
     except Exception as exc:
         raise OpenAIEngineError(
             code="engine_error",
@@ -191,6 +208,7 @@ async def handle_speech_request(
         "X-Request-Id": request_id,
         "X-Model-Used": model_id,
         "X-Voice-Used": voice_used,
+        "X-Speed-Used": str(speed_used),
         "Cache-Control": "no-store",
     }
 
@@ -198,4 +216,31 @@ async def handle_speech_request(
         output_stream,
         media_type=media_type,
         headers=headers,
+    )
+
+
+async def handle_list_voices(http_request: Request) -> VoicesListResponse:
+    """Process GET /v1/voices: list voices loaded on the default model.
+
+    All discovered Kokoro model variants share the same voices file
+    (see EngineRegistry), so the default model's catalog is authoritative.
+
+    Raises:
+        OpenAIAuthError: 401 invalid_api_key.
+        OpenAIEngineError: 503 engine_unavailable.
+    """
+    await _authenticate(http_request)
+
+    state = http_request.app.state
+    registry = getattr(state, "engine_registry", None)
+    if registry is None:
+        raise OpenAIEngineError(
+            code="engine_unavailable",
+            message="TTS engine not initialized",
+            status_code=503,
+        )
+    _, engine = registry.resolve(None)
+    voices = engine.available_voices() or []
+    return VoicesListResponse(
+        voices=[VoiceObject(voice_id=v, name=v) for v in voices]
     )

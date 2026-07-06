@@ -4,8 +4,14 @@ from typing import AsyncIterator
 
 class ITTSEngine(ABC):
     @abstractmethod
-    async def synthesize(self, text: str, voice: str | None = None) -> AsyncIterator[bytes]:
-        """Yield PCM16 LE mono audio frames for the given text."""
+    async def synthesize(
+        self, text: str, voice: str | None = None, speed: float | None = None
+    ) -> AsyncIterator[bytes]:
+        """Yield PCM16 LE mono audio frames for the given text.
+
+        `speed` is assumed already resolved via `resolve_speed()` — this
+        method does not re-validate or clamp it.
+        """
         ...
 
     @property
@@ -27,6 +33,14 @@ class ITTSEngine(ABC):
         if requested and (available is None or requested in available):
             return requested
         return self.default_voice
+
+    def resolve_speed(self, requested: float | None) -> float:
+        """Return `requested` clamped to whatever range this engine supports.
+
+        Base implementation is unrestricted (no clamping) — 1.0 when
+        `requested` is None. Never raises.
+        """
+        return requested if requested is not None else 1.0
 
     @abstractmethod
     async def aclose(self) -> None:
