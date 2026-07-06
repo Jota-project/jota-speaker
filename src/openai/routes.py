@@ -22,11 +22,31 @@ from src.openai.protocol import (
     OpenAIBadRequestError,
     OpenAIEngineError,
     SpeechRequest,
+    VoiceObject,
+    VoicesListResponse,
 )
 from src.openai.service import handle_speech_request
 
 
 router = APIRouter()
+
+
+@router.get("/v1/voices")
+async def list_voices(http_request: Request) -> VoicesListResponse:
+    """List all available voices.
+
+    Returns a list of voice objects with name, voice_id, and model.
+    """
+    engine = getattr(http_request.app.state, "engine", None)
+    if engine is None or not hasattr(engine, "list_voices"):
+        return VoicesListResponse(voices=[])
+    voices = engine.list_voices()
+    return VoicesListResponse(
+        voices=[
+            VoiceObject(name=name, voice_id=name)
+            for name in sorted(voices)
+        ]
+    )
 
 
 @router.post("/v1/audio/speech")

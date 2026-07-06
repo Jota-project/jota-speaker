@@ -135,11 +135,31 @@ async def handle_speech_request(
             message="input cannot be empty",
         )
 
-    # ── 3. Setup ────────────────────────────────────────────────────────────
+    # ── 3. Resolve voice (validate, fall back to default if unknown) ──────────
     settings = state.settings
+    engine = getattr(state, "engine", None)
+    requested_voice = request_body.voice
+    default_voice = settings.kokoro_voice
+
+    if engine is not None and hasattr(engine, "list_voices"):
+        valid_voices = engine.list_voices()
+        if requested_voice not in valid_voices:
+            _log.warning(
+                "voice=%r not in available voices (%d), falling back to %r",
+                requested_voice,
+                len(valid_voices),
+                default_voice,
+            )
+            voice_used = default_voice
+        else:
+            voice_used = requested_voice
+    else:
+        # No list_voices() available — pass through as-is
+        voice_used = requested_voice
+
+    # ── 4. Setup ────────────────────────────────────────────────────────────
     request_id = _new_request_id()
     model_used = _x_model_used(settings.engine)
-    voice_used = settings.kokoro_voice
 
     _log.info(
         "speech_start request_id=%s model=%s voice=%s chars=%d format=%s",
@@ -174,7 +194,9 @@ async def handle_speech_request(
             status_code=503,
         )
     try:
-        engine_stream: AsyncIterator[bytes] = engine.synthesize(normalized)
+        engine_stream: AsyncIterator[bytes] = engine.synthesize(
+            normalized, voice=voice_used, speed=request_body.speed
+        )
     except Exception as exc:
         raise OpenAIEngineError(
             code="engine_error",

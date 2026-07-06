@@ -67,6 +67,27 @@ class ErrorResponse(BaseModel):
     error: ErrorDetail
 
 
+# ── Voice list ──────────────────────────────────────────────────────────────
+
+
+class VoiceObject(BaseModel):
+    """A voice available for synthesis, matching OpenAI's /v1/voices shape."""
+
+    model_config = ConfigDict(extra="allow")
+
+    name: str
+    voice_id: str
+    model: str = "kokoro"
+
+
+class VoicesListResponse(BaseModel):
+    """Response envelope for GET /v1/voices."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    voices: list[VoiceObject]
+
+
 # ── Exception classes (caught by FastAPI handlers in routes.py) ──────────────
 
 

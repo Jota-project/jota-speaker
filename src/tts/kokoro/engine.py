@@ -35,6 +35,7 @@ class KokoroEngine(ITTSEngine):
         self._lang = lang
         self._sample_rate = sample_rate
         self.synthesize_timeout = synthesize_timeout
+        self._voices_path = voices_path
         logger.info("Loading Kokoro model from %s …", model_path)
         self._kokoro = Kokoro(model_path, voices_path)
         self._executor = ThreadPoolExecutor(
@@ -47,18 +48,32 @@ class KokoroEngine(ITTSEngine):
     def sample_rate(self) -> int:
         return self._sample_rate
 
-    async def synthesize(self, text: str) -> AsyncIterator[bytes]:
+    async def synthesize(
+        self, text: str, *, voice: str | None = None, speed: float | None = None
+    ) -> AsyncIterator[bytes]:
+        voice_ = voice if voice is not None else self._voice
+        speed_ = speed if speed is not None else 1.0
         loop = asyncio.get_running_loop()
         async with self._inference_lock:
             try:
                 if self.synthesize_timeout is not None:
                     audio: np.ndarray = await asyncio.wait_for(
-                        loop.run_in_executor(self._executor, self._run_inference, text),
+                        loop.run_in_executor(
+                            self._executor,
+                            self._run_inference,
+                            text,
+                            voice_,
+                            speed_,
+                        ),
                         timeout=self.synthesize_timeout,
                     )
                 else:
                     audio = await loop.run_in_executor(
-                        self._executor, self._run_inference, text
+                        self._executor,
+                        self._run_inference,
+                        text,
+                        voice_,
+                        speed_,
                     )
             except asyncio.TimeoutError:
                 logger.error("Kokoro inference timed out after %.2fs", self.synthesize_timeout)
@@ -71,13 +86,19 @@ class KokoroEngine(ITTSEngine):
 
     # ── sync (runs in dedicated thread pool) ─────────────────────────────────
 
-    def _run_inference(self, text: str) -> np.ndarray:
+    def _run_inference(
+        self, text: str, voice: str, speed: float
+    ) -> np.ndarray:
         samples, _ = self._kokoro.create(
-            text, voice=self._voice, speed=1.0, lang=self._lang
+            text, voice=voice, speed=speed, lang=self._lang
         )
         return samples.astype(np.float32)
 
     # ── lifecycle ─────────────────────────────────────────────────────────────
+
+    def list_voices(self) -> list[str]:
+        """Return the list of available voice names from the voices pack."""
+        return self._kokoro.get_voices()
 
     async def aclose(self) -> None:
         """Release native resources. Idempotent and safe to call twice."""
