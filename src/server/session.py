@@ -11,6 +11,7 @@ from starlette.websockets import WebSocket, WebSocketDisconnect
 from src.auth.interface import IAuthProvider
 from src.core.engine_registry import EngineRegistry
 from src.core.logger import get_logger
+from src.observability.metrics import observe_ttfb_ms
 from src.tts.normalizer import INormalizer
 from .accumulator import TokenAccumulator
 from .protocol import (
@@ -67,6 +68,8 @@ class SpeakerSession:
         self._log = _SidAdapter(_base_logger, {"sid": self._id})
         self._current_chunk_id: int | None = None
         self._interrupt_lock: bool = False
+        self._first_token_at: float | None = None
+        self._first_audio_sent: bool = False
 
     # ── public entry point ────────────────────────────────────────────────────
 
@@ -146,6 +149,8 @@ class SpeakerSession:
                     continue
 
                 if isinstance(msg, TokenMessage):
+                    if self._first_token_at is None:
+                        self._first_token_at = time.monotonic()
                     for seg in self._accumulator.add(msg.text):
                         if not await self._put(seg):
                             return
@@ -224,6 +229,15 @@ class SpeakerSession:
             try:
                 async for frame in self._engine.synthesize(normalized, voice=self._voice):
                     try:
+                        if not self._first_audio_sent:
+                            self._first_audio_sent = True
+                            if self._first_token_at is not None:
+                                elapsed_ms = (time.monotonic() - self._first_token_at) * 1000
+                                observe_ttfb_ms(
+                                    elapsed_ms,
+                                    session_type="ws",
+                                    engine=self._engine.__class__.__name__.lower(),
+                                )
                         await self._ws.send_bytes(frame)
                     except WebSocketDisconnect:
                         await self._send(ChunkAbortedMessage(chunk_id=chunk_id))
