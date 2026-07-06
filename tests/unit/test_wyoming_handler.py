@@ -202,3 +202,31 @@ async def test_describe_lists_all_available_voices():
     events = writer.parse_events()
     voices = events[0][1]["tts"][0]["voices"]
     assert {v["name"] for v in voices} == {"ef_dora", "em_alex"}
+
+
+async def test_synthesize_with_voice_null_falls_back_to_default():
+    """Test that voice: null does not crash the handler and falls back to default."""
+    engine = _VoiceCapturingEngine(sample_rate=24000)
+    handler = WyomingHandler(engine, Settings(engine="mock"))
+    writer = _FakeWriter()
+    line = json.dumps({"type": "synthesize", "data": {"text": "Hola", "voice": None}}) + "\n"
+    r = asyncio.StreamReader()
+    r.feed_data(line.encode())
+    r.feed_eof()
+    await handler.handle(r, writer)
+    assert engine.received_voices == ["ef_dora"]
+    assert writer.closed
+
+
+async def test_synthesize_with_voice_string_falls_back_to_default():
+    """Test that voice as a bare string does not crash the handler and falls back to default."""
+    engine = _VoiceCapturingEngine(sample_rate=24000)
+    handler = WyomingHandler(engine, Settings(engine="mock"))
+    writer = _FakeWriter()
+    line = json.dumps({"type": "synthesize", "data": {"text": "Hola", "voice": "em_alex"}}) + "\n"
+    r = asyncio.StreamReader()
+    r.feed_data(line.encode())
+    r.feed_eof()
+    await handler.handle(r, writer)
+    assert engine.received_voices == ["ef_dora"]
+    assert writer.closed

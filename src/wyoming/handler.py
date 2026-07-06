@@ -26,7 +26,8 @@ class WyomingHandler:
                 elif event_type == "synthesize":
                     text = data.get("text", "")
                     if text:
-                        requested_voice = data.get("voice", {}).get("name")
+                        voice_field = data.get("voice")
+                        requested_voice = voice_field.get("name") if isinstance(voice_field, dict) else None
                         try:
                             await self._synthesize(writer, text, requested_voice)
                         except Exception:
