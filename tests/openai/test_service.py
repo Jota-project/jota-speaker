@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 
 from src.auth.interface import IAuthProvider
 from src.auth.stub import StubAuthProvider
+from src.core.engine_registry import EngineRegistry
 from src.openai.routes import router as openai_router
 from src.tts.mock_engine import MockEngine
 from src.tts.normalizer import PassThroughNormalizer
@@ -23,7 +24,7 @@ def app_with_engine_and_stub_auth(monkeypatch):
     tests/integration/test_tts_stream.py.
     """
     app = FastAPI()
-    app.state.engine = MockEngine(sample_rate=24000)
+    app.state.engine_registry = EngineRegistry({"mock": MockEngine(sample_rate=24000)}, "mock")
     app.state.auth = StubAuthProvider()
     app.state.normalizer = PassThroughNormalizer()
 
@@ -53,7 +54,7 @@ class TestHappyPath:
         assert resp.headers["content-type"] == "audio/pcm"
         assert resp.headers["x-request-id"]
         assert resp.headers["x-model-used"] == "mock"
-        assert resp.headers["x-voice-used"] == "ef_dora"
+        assert resp.headers["x-voice-used"] == "alloy"
         # MockEngine emits at least one silence frame for a 11-char input
         assert len(resp.content) > 0
         assert len(resp.content) % 2 == 0  # PCM16 invariant
@@ -81,8 +82,8 @@ class TestHappyPath:
             json={"model": "kokoro-es", "input": "adios", "voice": "shimmer"},
         )
         assert resp.status_code == 200
-        # MVP behavior: voice from request is ignored, X-Voice-Used echoes the configured one
-        assert resp.headers["x-voice-used"] == "ef_dora"
+        # Fase 3: mock has no voice restriction, so the requested voice is honored.
+        assert resp.headers["x-voice-used"] == "shimmer"
 
 
 class TestAuthFailures:
@@ -149,8 +150,8 @@ class TestAuthFailures:
         assert resp.json()["error"]["type"] == "server_error"
 
     def test_engine_unavailable_returns_503(self, app_with_engine_and_stub_auth):
-        """When app.state.engine is missing the spec's 503 path applies."""
-        app_with_engine_and_stub_auth.state.engine = None
+        """When app.state.engine_registry is missing the spec's 503 path applies."""
+        app_with_engine_and_stub_auth.state.engine_registry = None
         client = TestClient(app_with_engine_and_stub_auth)
         resp = client.post(
             "/v1/audio/speech",
@@ -222,3 +223,62 @@ class TestInputValidation:
         )
         assert resp.status_code == 400
         assert resp.json()["error"]["param"] == "speed"
+
+
+class _RestrictedVoiceEngine(MockEngine):
+    def available_voices(self):
+        return ["ef_dora", "em_alex"]
+
+    @property
+    def default_voice(self):
+        return "ef_dora"
+
+
+class TestModelVoiceSelection:
+    def test_voice_not_loaded_falls_back_to_default(self, app_with_engine_and_stub_auth):
+        app_with_engine_and_stub_auth.state.engine_registry = EngineRegistry(
+            {"mock": _RestrictedVoiceEngine(sample_rate=24000)}, "mock"
+        )
+        client = TestClient(app_with_engine_and_stub_auth)
+        resp = client.post(
+            "/v1/audio/speech",
+            headers={"Authorization": "Bearer t"},
+            json={"model": "tts-1", "input": "hola", "voice": "nonexistent"},
+        )
+        assert resp.headers["x-voice-used"] == "ef_dora"
+
+    def test_voice_loaded_is_honored(self, app_with_engine_and_stub_auth):
+        app_with_engine_and_stub_auth.state.engine_registry = EngineRegistry(
+            {"mock": _RestrictedVoiceEngine(sample_rate=24000)}, "mock"
+        )
+        client = TestClient(app_with_engine_and_stub_auth)
+        resp = client.post(
+            "/v1/audio/speech",
+            headers={"Authorization": "Bearer t"},
+            json={"model": "tts-1", "input": "hola", "voice": "em_alex"},
+        )
+        assert resp.headers["x-voice-used"] == "em_alex"
+
+    def test_model_loaded_is_honored(self, app_with_engine_and_stub_auth):
+        app_with_engine_and_stub_auth.state.engine_registry = EngineRegistry(
+            {"mock": MockEngine(sample_rate=24000), "alt": MockEngine(sample_rate=24000)}, "mock"
+        )
+        client = TestClient(app_with_engine_and_stub_auth)
+        resp = client.post(
+            "/v1/audio/speech",
+            headers={"Authorization": "Bearer t"},
+            json={"model": "alt", "input": "hola"},
+        )
+        assert resp.headers["x-model-used"] == "alt"
+
+    def test_model_not_loaded_falls_back_to_default(self, app_with_engine_and_stub_auth):
+        app_with_engine_and_stub_auth.state.engine_registry = EngineRegistry(
+            {"mock": MockEngine(sample_rate=24000), "alt": MockEngine(sample_rate=24000)}, "mock"
+        )
+        client = TestClient(app_with_engine_and_stub_auth)
+        resp = client.post(
+            "/v1/audio/speech",
+            headers={"Authorization": "Bearer t"},
+            json={"model": "nonexistent", "input": "hola"},
+        )
+        assert resp.headers["x-model-used"] == "mock"

@@ -12,6 +12,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from src.auth.stub import StubAuthProvider
+from src.core.engine_registry import EngineRegistry
 from src.openai.routes import register_exception_handlers, router as openai_router
 from src.tts.mock_engine import MockEngine
 from src.tts.normalizer import PassThroughNormalizer
@@ -21,7 +22,7 @@ from src.tts.normalizer import PassThroughNormalizer
 def app():
     """Build a minimal FastAPI app mirroring src.main lifespan state."""
     app = FastAPI()
-    app.state.engine = MockEngine(sample_rate=24000)
+    app.state.engine_registry = EngineRegistry({"mock": MockEngine(sample_rate=24000)}, "mock")
     app.state.auth = StubAuthProvider()
     app.state.normalizer = PassThroughNormalizer()
 
@@ -170,15 +171,15 @@ class TestResponseHeaders:
         )
         assert resp.headers["x-model-used"] == "mock"
 
-    def test_x_voice_used_echoes_engine_setting(self, app):
+    def test_x_voice_used_honors_requested_voice(self, app):
         client = TestClient(app)
         resp = client.post(
             "/v1/audio/speech",
             headers={"Authorization": "Bearer t"},
             json={"model": "tts-1", "input": "hola", "voice": "shimmer"},
         )
-        # MVP ignores voice from request, echoes the engine setting
-        assert resp.headers["x-voice-used"] == "ef_dora"
+        # Fase 3: mock has no voice restriction, so the requested voice is honored.
+        assert resp.headers["x-voice-used"] == "shimmer"
 
     def test_cache_control_no_store(self, app):
         client = TestClient(app)

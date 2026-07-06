@@ -79,11 +79,6 @@ def _new_request_id() -> str:
     return uuid.uuid4().hex[:12]
 
 
-def _x_model_used(settings_engine: str) -> str:
-    """Map the runtime engine name to a model identifier in the response header."""
-    return "mock" if settings_engine == "mock" else "kokoro-es"
-
-
 # ── Main service entry point ────────────────────────────────────────────────
 
 
@@ -135,16 +130,22 @@ async def handle_speech_request(
             message="input cannot be empty",
         )
 
-    # ── 3. Setup ────────────────────────────────────────────────────────────
-    settings = state.settings
+    # ── 3. Resolve model/voice ────────────────────────────────────────────
+    registry = getattr(state, "engine_registry", None)
+    if registry is None:
+        raise OpenAIEngineError(
+            code="engine_unavailable",
+            message="TTS engine not initialized",
+            status_code=503,
+        )
+    model_id, engine = registry.resolve(request_body.model)
+    voice_used = engine.resolve_voice(request_body.voice)
     request_id = _new_request_id()
-    model_used = _x_model_used(settings.engine)
-    voice_used = settings.kokoro_voice
 
     _log.info(
         "speech_start request_id=%s model=%s voice=%s chars=%d format=%s",
         request_id,
-        model_used,
+        model_id,
         voice_used,
         len(request_body.input),
         request_body.response_format,
@@ -166,15 +167,8 @@ async def handle_speech_request(
             status_code=503,
         )
 
-    engine = getattr(state, "engine", None)
-    if engine is None or not hasattr(engine, "synthesize"):
-        raise OpenAIEngineError(
-            code="engine_unavailable",
-            message="TTS engine not initialized",
-            status_code=503,
-        )
     try:
-        engine_stream: AsyncIterator[bytes] = engine.synthesize(normalized)
+        engine_stream: AsyncIterator[bytes] = engine.synthesize(normalized, voice=voice_used)
     except Exception as exc:
         raise OpenAIEngineError(
             code="engine_error",
@@ -195,7 +189,7 @@ async def handle_speech_request(
     # ── 7. Build response ───────────────────────────────────────────────────
     headers = {
         "X-Request-Id": request_id,
-        "X-Model-Used": model_used,
+        "X-Model-Used": model_id,
         "X-Voice-Used": voice_used,
         "Cache-Control": "no-store",
     }

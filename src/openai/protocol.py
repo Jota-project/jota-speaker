@@ -23,10 +23,12 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 class SpeechRequest(BaseModel):
     """Body of POST /v1/audio/speech.
 
-    Matches the OpenAI TTS request shape at the wire level. Fields the MVP
-    ignores (model, voice, speed, instructions) are still validated so that
-    clients sending arbitrary values do not get a 4xx — only nonsense
-    values (empty strings, out-of-range speed) are rejected.
+    Matches the OpenAI TTS request shape at the wire level. `model`/`voice`
+    are resolved against the loaded EngineRegistry (Fase 3) — unknown values
+    fall back to the configured default rather than erroring. `speed` and
+    `instructions` are still validated but ignored; clients sending
+    arbitrary values do not get a 4xx — only nonsense values (empty
+    strings, out-of-range speed) are rejected.
     """
 
     model_config = ConfigDict(extra="ignore")
