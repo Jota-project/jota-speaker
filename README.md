@@ -492,7 +492,7 @@ request and response shape.
 | `model` | string | yes | — | Kokoro model id (see [Configuration](#configuration)). Falls back to the default model if unknown. |
 | `input` | string | yes | — | 1–4096 chars. |
 | `voice` | string | no | `"alloy"` | Falls back to the default voice if unknown or not loaded (e.g. OpenAI's own `"alloy"`/`"shimmer"` names won't match a Kokoro voice). |
-| `response_format` | string | no | `"wav"` | Supports `"pcm"`, `"wav"`, `"mp3"`, `"opus"`, `"aac"`, and `"flac"` (64 kbps CBR mono for mp3/opus/aac, lossless for flac; all via ffmpeg). Other values return 400. |
+| `response_format` | string | no | `"wav"` | Supports `"pcm"`, `"wav"`, `"mp3"`, `"opus"`, `"aac"`, and `"flac"` (64 kbps CBR mono for mp3/opus, 64 kbps VBR for aac, lossless for flac; all via ffmpeg). Other values return 400. |
 | `speed` | float | no | `1.0` | Range `0.25..4.0` (Pydantic-validated). Clamped to whatever the resolved engine natively supports (Kokoro: `0.5..2.0`) via `resolve_speed()` — never rejected, just clamped. |
 | `instructions` | string | no | `null` | Accepted, ignored in MVP. |
 | `stream` | bool | no | `true` | jota-speaker extension, not part of the real OpenAI wire shape (see issue #9). `true` (default): chunked streaming, unchanged. `false`: buffers the full response and returns it with an exact `Content-Length` — for strict clients/players that handle chunked transfer or unknown-length WAV headers poorly. |
@@ -661,25 +661,52 @@ Tests are also run automatically via GitHub Actions on every push and pull reque
 
 ---
 
-## Status & roadmap
+## v1.0 — Final state (2026-07-06)
 
-- **Status:** Maintained. Most recent work added **Fase 4 barge-in** — in-session `interrupt` message with `<100 ms` cancellation latency (PR #6, 2026-07-02) — and **Fase 6 OpenAI-compatible endpoint** — `POST /v1/audio/speech` with PCM/WAV output (PR #9, 2026-07-06).
-- **Default voice:** `ef_dora` (Spanish, female). Configurable via `JOTA_KOKORO_VOICE`.
-- **Delivered phases:**
-  - **Wyoming** — TCP server on port `20424` for Home Assistant TTS integration.
-  - **Fase 1** — robustness & cancellation: `chunk_aborted` message, `aclose()` on engine, asyncio lock in Kokoro, integration teardown tests (PR #4, 2026-06-29).
-  - **Fase 2** — Spanish text normalization: `SpanishNormalizer` (numbers, dates, hours, currency, emails, URLs, abbreviations) + `PassThroughNormalizer` (PR #4, 2026-06-29).
-  - **Fase 3** — model/voice runtime selection: clients can request `model`/`voice` over HTTP, WebSocket (`auth` message), and Wyoming (voice only); unloaded values fall back silently to the configured default (see [spec](docs/superpowers/specs/2026-07-04-fase-3-model-voice-selection-design.md)).
-  - **Fase 4** — barge-in: in-session `interrupt` (PR #6, 2026-07-02).
-  - **Fase 6** — OpenAI-compatible `POST /v1/audio/speech`: Bearer auth, PCM16 + WAV output, streaming, OpenAI error envelope (PR #9, 2026-07-06).
-  - **`speed` param** (#13) — honored in `POST /v1/audio/speech`, clamped to the resolved engine's native range via `resolve_speed()`.
-  - **`GET /v1/voices`** (#14) — ElevenLabs-style voice catalog, auto-discovered from `available_voices()` on the default model.
-  - **`stream: bool`** (#9) — buffered (exact `Content-Length`) response mode for `POST /v1/audio/speech`, alongside the default chunked streaming.
-- **Active directions (GitHub issues):**
-  - [#15](https://github.com/Jota-project/jota-speaker/issues/15) — `instructions` field: honor SSML-like voice instructions per request.
-  - [#16](https://github.com/Jota-project/jota-speaker/issues/16) — SSE/Realtime endpoint: OpenAI Realtime-style streaming — questionable given `/ws` and Wyoming already cover interactive/event-based use cases; needs a dedicated spec before any implementation.
-  - [#17](https://github.com/Jota-project/jota-speaker/issues/17) — configurable bitrate for mp3/opus/aac response formats (speculative, no known need yet).
-  - [#2](https://github.com/Jota-project/jota-speaker/issues/2) — concurrency control: semaphore for TTS engine.
-  - **Auth migration**: planning to move from `jota-db` external auth to per-service `TTS_TOKEN` (tracked in [`Jota-project/jota-gateway` issue tracker](https://github.com/Jota-project/jota-gateway/issues)).
-  - **Wyoming**: protocol coverage for HA discoverability is complete; expect incremental fixes as HA updates.
-  - **Fase 5** — TTFB metrics + barge-in latency histograms: scope TBD.
+**Status: Stable.** This is the production-ready v1.0. Remaining issues are minor fixes and bug fixes from real usage. All core functionality is delivered.
+
+### What's in v1.0
+
+**Server surfaces:**
+- **WebSocket** (`/ws`) — receives LLM tokens, streams PCM16 audio. Supports barge-in interrupt mid-stream.
+- **Wyoming TCP** (port `20424`) — Home Assistant native TTS integration.
+- **HTTP REST** (`POST /v1/audio/speech`, `GET /v1/voices`) — OpenAI-compatible TTS API.
+
+**TTS engine:**
+- **Kokoro ONNX** — fast, local inference. Spanish voice `ef_dora` by default. Three Spanish voices available: `ef_dora`, `em_alex`, `em_santa`.
+- **Concurrency control** — `asyncio.Lock` serializes inference calls (one synthesis at a time).
+- **Per-request voice** — override the default voice per request via `voice` param (HTTP, WebSocket `auth`, or Wyoming `synthesize`).
+- **Per-request speed** — `speed` param (0.25–4.0, clamped to engine range) for pace control.
+
+**Audio output:**
+- Formats: PCM16, WAV, **MP3** (64 kbps CBR), **Opus** (64 kbps CBR via libopus), **AAC** (64 kbps, VBR — limitation accepted), **FLAC** (lossless).
+- Two response modes: **streaming** (chunked transfer, default) and **buffered** (`stream: false`, exact `Content-Length`).
+- Spanish text **normalization** — numbers, dates, hours, currency, emails, URLs, abbreviations.
+- **Barge-in** — interrupt playback mid-stream in <100 ms.
+
+**Authentication:** Bearer token validated against `jota-db` auth provider.
+
+### Backlog
+
+| # | Description | Notes |
+|---|---|---|
+| [#16](https://github.com/Jota-project/jota-speaker/issues/16) | SSE/Realtime endpoint | Covered by WebSocket + Wyoming. No immediate need. |
+| [#17](https://github.com/Jota-project/jota-speaker/issues/17) | Configurable bitrate | Speculative — no known need yet. |
+| [#21](https://github.com/Jota-project/jota-speaker/issues/21) | Chatterbox TTS engine | GPU-powered alternative to Kokoro. Benchmark pending. |
+
+### Won't do
+
+| # | Description | Reason |
+|---|---|---|
+| [#15](https://github.com/Jota-project/jota-speaker/issues/15) | Honor `instructions` field | Kokoro doesn't expose style/tone modifiers. Accepted but has no effect. |
+
+### Changelog (selected PRs)
+
+| PR | Description |
+|---|---|
+| [#23](https://github.com/Jota-project/jota-speaker/pull/23) | Buffered response mode (`stream: bool`) |
+| [#20](https://github.com/Jota-project/jota-speaker/pull/20) | Fase 3 — per-request voice/speed, GET /v1/voices |
+| [#11](https://github.com/Jota-project/jota-speaker/pull/11) | MP3, Opus, AAC, FLAC encoders (64 kbps CBR) |
+| [#9](https://github.com/Jota-project/jota-speaker/pull/9) | OpenAI-compatible POST /v1/audio/speech |
+| [#6](https://github.com/Jota-project/jota-speaker/pull/6) | Barge-in (<100 ms interrupt) |
+| [#4](https://github.com/Jota-project/jota-speaker/pull/4) | Spanish normalizer, robustness & teardown |
