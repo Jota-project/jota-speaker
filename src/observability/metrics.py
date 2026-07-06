@@ -81,8 +81,38 @@ def _safe(func: _F) -> _F:
     return wrapper  # type: ignore[return-value]
 
 
+def _load_enabled_at_import() -> bool:
+    """Read the metrics_enabled flag once at module import time.
+
+    Cached rather than re-read per call: cheap, and a runtime env change
+    without a process restart is an accepted limitation (see README).
+    """
+    try:
+        from src.core.config import get_settings
+
+        return get_settings().metrics_enabled
+    except Exception:
+        return True
+
+
+_ENABLED: bool = _load_enabled_at_import()
+
+
+def _noop_if_disabled(func: _F) -> _F:
+    """Skip the wrapped helper entirely when JOTA_METRICS_ENABLED=false."""
+
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        if not _ENABLED:
+            return None
+        return func(*args, **kwargs)
+
+    return wrapper  # type: ignore[return-value]
+
+
 # ── Helpers (wrap prometheus_client to keep call sites clean) ──────────────
 
+@_noop_if_disabled
 @_safe
 def observe_ttfb_ms(duration_ms: float, session_type: str, engine: str) -> None:
     """Observe TTFB. durations < 0 are dropped (clock skew)."""
@@ -93,6 +123,7 @@ def observe_ttfb_ms(duration_ms: float, session_type: str, engine: str) -> None:
     )
 
 
+@_noop_if_disabled
 @_safe
 def observe_barge_in_latency_ms(duration_ms: float, session_type: str) -> None:
     """Observe barge-in latency. durations < 0 are dropped."""
@@ -103,38 +134,45 @@ def observe_barge_in_latency_ms(duration_ms: float, session_type: str) -> None:
     )
 
 
+@_noop_if_disabled
 @_safe
 def session_started(session_type: str) -> None:
     SESSIONS_ACTIVE.labels(session_type=session_type).inc()
 
 
+@_noop_if_disabled
 @_safe
 def session_ended(session_type: str, result: str) -> None:
     SESSIONS_ACTIVE.labels(session_type=session_type).dec()
     SESSIONS_TOTAL.labels(session_type=session_type, result=result).inc()
 
 
+@_noop_if_disabled
 @_safe
 def error_occurred(code: str) -> None:
     ERRORS_TOTAL.labels(code=code).inc()
 
 
+@_noop_if_disabled
 @_safe
 def chunk_finished(aborted: bool) -> None:
     CHUNKS_TOTAL.labels(result="aborted" if aborted else "ok").inc()
 
 
+@_noop_if_disabled
 @_safe
 def interrupt_processed(latency_ms: float, session_type: str) -> None:
     INTERRUPTS_TOTAL.inc()
     observe_barge_in_latency_ms(latency_ms, session_type)
 
 
+@_noop_if_disabled
 @_safe
 def synthesis_started() -> None:
     SYNTHESIS_IN_FLIGHT.inc()
 
 
+@_noop_if_disabled
 @_safe
 def synthesis_finished() -> None:
     SYNTHESIS_IN_FLIGHT.dec()
