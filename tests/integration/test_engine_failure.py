@@ -2,7 +2,6 @@ import asyncio
 import json
 import time
 
-import pytest
 from fastapi.testclient import TestClient
 
 from src.auth.stub import StubAuthProvider

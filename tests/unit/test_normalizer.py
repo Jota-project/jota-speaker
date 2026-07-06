@@ -1,4 +1,5 @@
 import pytest
+import time
 
 from src.tts.normalizer import INormalizer, PassThroughNormalizer, SpanishNormalizer
 
@@ -165,9 +166,6 @@ async def test_spanish_normalizer_mention(norm):
 @pytest.mark.asyncio
 async def test_spanish_normalizer_ampersand(norm):
     assert await norm.normalize("A & B") == "A y B"
-
-
-import time
 
 
 @pytest.mark.asyncio

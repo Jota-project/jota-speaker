@@ -11,7 +11,6 @@ from unittest.mock import MagicMock
 from fastapi.websockets import WebSocketState
 
 from src.core.engine_registry import EngineRegistry
-from src.server.accumulator import TokenAccumulator
 from src.server.session import SpeakerSession
 
 

@@ -1,7 +1,6 @@
 import asyncio
 import json
 
-import pytest
 
 from src.core.config import Settings
 from src.tts.mock_engine import MockEngine

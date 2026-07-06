@@ -1,6 +1,5 @@
 """Unit tests for RIFF/WAVE header builder and streaming encoders."""
 
-import asyncio
 import shutil
 import struct
 import subprocess

@@ -1,7 +1,5 @@
 """Integration tests for handle_speech_request with MockEngine and stub auth."""
 
-import asyncio
-import json
 
 import pytest
 from fastapi import FastAPI
