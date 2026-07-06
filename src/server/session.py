@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import time
 import uuid
 from typing import Any
 
@@ -166,7 +167,7 @@ class SpeakerSession:
                         continue
                     self._interrupt_lock = True
                     try:
-                        await self._handle_interrupt()
+                        await self._handle_interrupt(t0=time.monotonic())
                     finally:
                         self._interrupt_lock = False
 
@@ -237,7 +238,7 @@ class SpeakerSession:
         finally:
             self._current_chunk_id = None
 
-    async def _handle_interrupt(self) -> None:
+    async def _handle_interrupt(self, t0: float | None = None) -> None:
         aborted_id = self._current_chunk_id
         # Cancel worker (will raise CancelledError inside _synthesize_segment).
         if self._tts_task is not None and not self._tts_task.done():
@@ -274,6 +275,11 @@ class SpeakerSession:
             await self._send(InterruptedMessage(chunk_id=aborted_id or 0))
         except Exception:
             pass
+        if t0 is not None:
+            from src.observability.metrics import interrupt_processed
+
+            latency_ms = (time.monotonic() - t0) * 1000
+            interrupt_processed(latency_ms, session_type="ws")
         self._log.info("Barge-in processed (aborted_id=%s, drained=%d)", aborted_id, drained)
 
     # ── helpers ───────────────────────────────────────────────────────────────
