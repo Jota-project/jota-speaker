@@ -38,13 +38,19 @@ async def list_voices(http_request: Request) -> VoicesListResponse:
     Returns a list of voice objects with name, voice_id, and model.
     """
     engine = getattr(http_request.app.state, "engine", None)
-    if engine is None or not hasattr(engine, "list_voices"):
-        return VoicesListResponse(voices=[])
-    voices = engine.list_voices()
+    if engine is not None and hasattr(engine, "list_voices"):
+        all_voices = engine.list_voices()
+    else:
+        all_voices = []
+
+    # Filter to the 3 Spanish voices we support
+    spanish_voices = ["ef_dora", "em_alex", "em_santa"]
+    available = [v for v in spanish_voices if v in all_voices]
+
     return VoicesListResponse(
         voices=[
             VoiceObject(name=name, voice_id=name)
-            for name in sorted(voices)
+            for name in available
         ]
     )
 
