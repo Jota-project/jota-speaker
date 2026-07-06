@@ -30,12 +30,17 @@ def ffmpeg_available() -> bool:
     return shutil.which("ffmpeg") is not None
 
 
-def build_wav_header(sample_rate: int) -> bytes:
-    """Build a 44-byte RIFF/WAVE header for streaming unknown-length PCM16 LE mono audio.
+def build_wav_header(sample_rate: int, data_size: int | None = None) -> bytes:
+    """Build a 44-byte RIFF/WAVE header for PCM16 LE mono audio.
+
+    `data_size` is None for streaming (unknown-length): ChunkSize and
+    Subchunk2Size use the 0xFFFFFFFF (RF64) sentinel. When `data_size` is
+    given (buffered mode — see `stream: false` in SpeechRequest), both
+    fields carry the exact byte-accurate sizes instead.
 
     Layout (all little-endian):
         0-3    "RIFF"
-        4-7    ChunkSize = 0xFFFFFFFF  (unknown)
+        4-7    ChunkSize = 36 + data_size, or 0xFFFFFFFF if unknown
         8-11   "WAVE"
         12-15  "fmt "
         16-19  Subchunk1Size = 16  (PCM)
@@ -46,14 +51,20 @@ def build_wav_header(sample_rate: int) -> bytes:
         32-33  BlockAlign = NumChannels * BitsPerSample/8 = 2
         34-35  BitsPerSample = 16
         36-39  "data"
-        40-43  Subchunk2Size = 0xFFFFFFFF  (unknown)
+        40-43  Subchunk2Size = data_size, or 0xFFFFFFFF if unknown
     """
     byte_rate = sample_rate * 1 * 2  # NumChannels * BitsPerSample/8
     block_align = 2  # NumChannels * BitsPerSample/8
+    if data_size is None:
+        chunk_size = 0xFFFFFFFF
+        subchunk2_size = 0xFFFFFFFF
+    else:
+        chunk_size = 36 + data_size
+        subchunk2_size = data_size
     return struct.pack(
         "<4sI4s4sIHHIIHH4sI",
         b"RIFF",
-        0xFFFFFFFF,   # ChunkSize (streaming, unknown)
+        chunk_size,
         b"WAVE",
         b"fmt ",
         16,           # Subchunk1Size (PCM)
@@ -64,7 +75,7 @@ def build_wav_header(sample_rate: int) -> bytes:
         block_align,
         16,           # BitsPerSample
         b"data",
-        0xFFFFFFFF,   # Subchunk2Size (streaming, unknown)
+        subchunk2_size,
     )
 
 

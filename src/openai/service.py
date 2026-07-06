@@ -23,10 +23,18 @@ import uuid
 from typing import AsyncIterator, Optional
 
 from fastapi import Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 
 from src.core.logger import get_logger
-from src.openai.encoder import aac_stream, flac_stream, mp3_stream, opus_stream, pcm_stream, wav_stream
+from src.openai.encoder import (
+    aac_stream,
+    build_wav_header,
+    flac_stream,
+    mp3_stream,
+    opus_stream,
+    pcm_stream,
+    wav_stream,
+)
 from src.openai.protocol import (
     OpenAIAuthError,
     OpenAIBadRequestError,
@@ -112,8 +120,8 @@ async def _authenticate(http_request: Request) -> None:
 async def handle_speech_request(
     request_body: SpeechRequest,
     http_request: Request,
-) -> StreamingResponse:
-    """Process POST /v1/audio/speech and return a streaming audio response.
+) -> StreamingResponse | Response:
+    """Process POST /v1/audio/speech and return an audio response.
 
     Lifecycle:
     1. Extract and validate Bearer token via IAuthProvider (app.state.auth).
@@ -124,7 +132,11 @@ async def handle_speech_request(
     5. Call engine.synthesize(normalized) → AsyncIterator[bytes].
     6. Wrap with pcm_stream, wav_stream, or one of the ffmpeg-based
        encoders (mp3/opus/aac/flac) per response_format.
-    7. Return StreamingResponse with X-Request-Id, X-Model-Used, X-Voice-Used.
+    7. If `request_body.stream` (default True): return StreamingResponse,
+       chunked, with X-Request-Id/X-Model-Used/X-Voice-Used/X-Speed-Used.
+       Otherwise buffer the full response — for `wav`, this also swaps the
+       streaming 0xFFFFFFFF header sentinel for the exact byte-accurate
+       size — and return a plain Response with a real Content-Length.
 
     Raises:
         OpenAIAuthError: 401 invalid_api_key.
@@ -193,12 +205,18 @@ async def handle_speech_request(
         )
 
     # ── 6. Wrap with encoder ────────────────────────────────────────────────
+    output_stream: AsyncIterator[bytes] | None
     if fmt in _FFMPEG_ENCODERS:
         media_type, encoder_fn = _FFMPEG_ENCODERS[fmt]
         output_stream = encoder_fn(engine_stream, engine.sample_rate)
     elif fmt == "wav":
-        output_stream = wav_stream(engine_stream, engine.sample_rate)
         media_type = "audio/wav"
+        # Buffered mode needs the real PCM size before it can build a
+        # byte-accurate header, so it bypasses wav_stream's sentinel header
+        # entirely (see the buffering branch below).
+        output_stream = None if not request_body.stream else wav_stream(
+            engine_stream, engine.sample_rate
+        )
     else:
         output_stream = pcm_stream(engine_stream)
         media_type = "audio/pcm"
@@ -211,6 +229,19 @@ async def handle_speech_request(
         "X-Speed-Used": str(speed_used),
         "Cache-Control": "no-store",
     }
+
+    if not request_body.stream:
+        if fmt == "wav":
+            pcm = bytearray()
+            async for chunk in engine_stream:
+                pcm.extend(chunk)
+            body = build_wav_header(engine.sample_rate, data_size=len(pcm)) + bytes(pcm)
+        else:
+            buffered = bytearray()
+            async for chunk in output_stream:
+                buffered.extend(chunk)
+            body = bytes(buffered)
+        return Response(content=body, media_type=media_type, headers=headers)
 
     return StreamingResponse(
         output_stream,

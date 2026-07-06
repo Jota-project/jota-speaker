@@ -6,6 +6,7 @@ We never load Kokoro in tests (the project's convention).
 """
 
 import shutil
+import struct
 
 import pytest
 from fastapi import FastAPI
@@ -272,3 +273,70 @@ class TestListVoices:
         resp = client.get("/v1/voices", headers={"Authorization": "Bearer t"})
         assert resp.status_code == 503
         assert resp.json()["error"]["code"] == "engine_unavailable"
+
+
+class TestBufferedMode:
+    """stream=false: full response with an exact Content-Length (issue #9)."""
+
+    def test_pcm_buffered_has_exact_content_length(self, app):
+        client = TestClient(app)
+        resp = client.post(
+            "/v1/audio/speech",
+            headers={"Authorization": "Bearer t"},
+            json={"model": "tts-1", "input": "hola", "response_format": "pcm", "stream": False},
+        )
+        assert resp.status_code == 200
+        assert int(resp.headers["content-length"]) == len(resp.content)
+        assert "transfer-encoding" not in resp.headers
+        assert len(resp.content) % 2 == 0  # PCM16 invariant
+
+    def test_wav_buffered_has_byte_accurate_header(self, app):
+        client = TestClient(app)
+        resp = client.post(
+            "/v1/audio/speech",
+            headers={"Authorization": "Bearer t"},
+            json={"model": "tts-1", "input": "hola", "response_format": "wav", "stream": False},
+        )
+        assert resp.status_code == 200
+        assert int(resp.headers["content-length"]) == len(resp.content)
+        assert "transfer-encoding" not in resp.headers
+
+        content = resp.content
+        assert content[:4] == b"RIFF"
+        chunk_size = struct.unpack("<I", content[4:8])[0]
+        subchunk2_size = struct.unpack("<I", content[40:44])[0]
+        pcm_size = len(content) - 44
+        assert chunk_size == 36 + pcm_size  # not the 0xFFFFFFFF streaming sentinel
+        assert subchunk2_size == pcm_size
+
+    def test_wav_streaming_default_keeps_sentinel_header(self, app):
+        """stream defaults to true — unbuffered path is unaffected."""
+        client = TestClient(app)
+        resp = client.post(
+            "/v1/audio/speech",
+            headers={"Authorization": "Bearer t"},
+            json={"model": "tts-1", "input": "hola", "response_format": "wav"},
+        )
+        assert resp.status_code == 200
+        chunk_size = struct.unpack("<I", resp.content[4:8])[0]
+        assert chunk_size == 0xFFFFFFFF
+
+    @pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg not installed")
+    @pytest.mark.parametrize("fmt,content_type", [
+        ("mp3", "audio/mpeg"),
+        ("opus", "audio/ogg"),
+        ("aac", "audio/aac"),
+        ("flac", "audio/flac"),
+    ])
+    def test_ffmpeg_formats_buffered_have_exact_content_length(self, app, fmt, content_type):
+        client = TestClient(app)
+        resp = client.post(
+            "/v1/audio/speech",
+            headers={"Authorization": "Bearer t"},
+            json={"model": "tts-1", "input": "hola mundo", "response_format": fmt, "stream": False},
+        )
+        assert resp.status_code == 200
+        assert resp.headers["content-type"] == content_type
+        assert int(resp.headers["content-length"]) == len(resp.content)
+        assert "transfer-encoding" not in resp.headers
+        assert len(resp.content) > 0
