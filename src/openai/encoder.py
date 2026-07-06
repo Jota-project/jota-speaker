@@ -160,8 +160,10 @@ async def opus_stream(
     source: AsyncIterator[bytes],
     sample_rate: int,
 ) -> AsyncIterator[bytes]:
-    """Encode a PCM16 LE mono stream to Ogg Opus (64 kbps) via ffmpeg."""
-    async for chunk in _ffmpeg_stream(source, sample_rate, ["-f", "ogg", "-c:a", "libopus", "-b:a", "64k"]):
+    """Encode a PCM16 LE mono stream to Ogg Opus (64 kbps CBR) via ffmpeg."""
+    async for chunk in _ffmpeg_stream(
+        source, sample_rate, ["-f", "ogg", "-c:a", "libopus", "-b:a", "64k", "-vbr", "off"]
+    ):
         yield chunk
 
 
