@@ -26,8 +26,9 @@ class WyomingHandler:
                 elif event_type == "synthesize":
                     text = data.get("text", "")
                     if text:
+                        requested_voice = data.get("voice", {}).get("name")
                         try:
-                            await self._synthesize(writer, text)
+                            await self._synthesize(writer, text, requested_voice)
                         except Exception:
                             logger.exception("Synthesis error for text=%r", text)
         except (asyncio.IncompleteReadError, ConnectionResetError):
@@ -41,6 +42,7 @@ class WyomingHandler:
             logger.info("Wyoming connection closed %s", peer)
 
     async def _describe(self, writer) -> None:
+        voices = self._engine.available_voices() or [self._settings.kokoro_voice]
         await write_event(writer, "info", {
             "asr": [],
             "tts": [{
@@ -50,23 +52,24 @@ class WyomingHandler:
                 "installed": True,
                 "languages": [self._settings.kokoro_lang],
                 "voices": [{
-                    "name": self._settings.kokoro_voice,
-                    "description": self._settings.kokoro_voice,
+                    "name": v,
+                    "description": v,
                     "attribution": {"name": "jota-speaker", "url": ""},
                     "installed": True,
                     "languages": [self._settings.kokoro_lang],
                     "speakers": [],
-                }],
+                } for v in voices],
             }],
             "wake": [],
             "handle": [],
             "intent": [],
         })
 
-    async def _synthesize(self, writer, text: str) -> None:
+    async def _synthesize(self, writer, text: str, requested_voice: str | None = None) -> None:
+        voice = self._engine.resolve_voice(requested_voice)
         rate = self._engine.sample_rate
         audio_info = {"rate": rate, "width": 2, "channels": 1}
         await write_event(writer, "audio-start", audio_info)
-        async for chunk in self._engine.synthesize(text):
+        async for chunk in self._engine.synthesize(text, voice=voice):
             await write_event(writer, "audio-chunk", audio_info, payload=chunk)
         await write_event(writer, "audio-stop", {"timestamp": 0})
