@@ -303,9 +303,11 @@ Must be the first message sent after connecting.
 |---|---|---|---|
 | `type` | `"auth"` | yes | |
 | `token` | string | yes | Bearer token for authentication |
+| `model` | string | no | Kokoro model id to use for this session (see [Configuration](#configuration)). Falls back to the default model if unknown or omitted. |
+| `voice` | string | no | Voice to use for this session. Falls back to the default voice if unknown or omitted. |
 
 ```json
-{"type": "auth", "token": "sk-..."}
+{"type": "auth", "token": "sk-...", "model": "kokoro-v1.0.int8", "voice": "em_alex"}
 ```
 
 #### `token`
@@ -350,8 +352,14 @@ Control messages are **JSON text frames**. Audio data is **binary frames**.
 #### `auth_ok`
 Authentication succeeded. The session is now active.
 
+| Field | Type | Description |
+|---|---|---|
+| `type` | `"auth_ok"` | |
+| `model_used` | string | The model id actually resolved for this session (may differ from the requested `model` if it wasn't loaded). |
+| `voice_used` | string | The voice actually resolved for this session (may differ from the requested `voice` if it wasn't loaded). |
+
 ```json
-{"type": "auth_ok"}
+{"type": "auth_ok", "model_used": "kokoro-v1.0.int8", "voice_used": "em_alex"}
 ```
 
 #### `auth_error`
@@ -480,9 +488,9 @@ request and response shape.
 
 | Field | Type | Required | Default | Notes |
 |---|---|---|---|---|
-| `model` | string | yes | — | Accepted but ignored in MVP. Always `kokoro-es` in production, `mock` in tests. |
+| `model` | string | yes | — | Kokoro model id (see [Configuration](#configuration)). Falls back to the default model if unknown. |
 | `input` | string | yes | — | 1–4096 chars. |
-| `voice` | string | no | `"alloy"` | Accepted but ignored in MVP. Always `JOTA_KOKORO_VOICE`. |
+| `voice` | string | no | `"alloy"` | Falls back to the default voice if unknown or not loaded (e.g. OpenAI's own `"alloy"`/`"shimmer"` names won't match a Kokoro voice). |
 | `response_format` | string | no | `"wav"` | Supports `"pcm"`, `"wav"`, `"mp3"`, `"opus"`, `"aac"`, and `"flac"` (64 kbps CBR mono for mp3/opus/aac, lossless for flac; all via ffmpeg). Other values return 400. |
 | `speed` | float | no | `1.0` | Range `0.25..4.0`. Validated, ignored in MVP. |
 | `instructions` | string | no | `null` | Accepted, ignored in MVP. |
@@ -526,7 +534,7 @@ All settings use the `JOTA_` prefix and can be set via environment variables or 
 | Variable | Default | Description |
 |---|---|---|
 | `JOTA_ENGINE` | `mock` | TTS engine: `mock` (silence, for tests) or `kokoro` |
-| `JOTA_KOKORO_MODEL` | `kokoro-v1.0.int8.onnx` | Path to Kokoro ONNX model file |
+| `JOTA_KOKORO_MODEL` | `kokoro-v1.0.int8.onnx` | Path to the *default* Kokoro ONNX model file. All `.onnx` files in the same directory are auto-discovered and loaded at startup as selectable models (id = filename without extension). |
 | `JOTA_KOKORO_VOICES` | `voices-v1.0.bin` | Path to Kokoro voices file |
 | `JOTA_KOKORO_VOICE` | `ef_dora` | Kokoro voice (see voices list below) |
 | `JOTA_KOKORO_LANG` | `es` | Kokoro language code |
@@ -638,12 +646,12 @@ Tests are also run automatically via GitHub Actions on every push and pull reque
   - **Wyoming** — TCP server on port `20424` for Home Assistant TTS integration.
   - **Fase 1** — robustness & cancellation: `chunk_aborted` message, `aclose()` on engine, asyncio lock in Kokoro, integration teardown tests (PR #4, 2026-06-29).
   - **Fase 2** — Spanish text normalization: `SpanishNormalizer` (numbers, dates, hours, currency, emails, URLs, abbreviations) + `PassThroughNormalizer` (PR #4, 2026-06-29).
+  - **Fase 3** — model/voice runtime selection: clients can request `model`/`voice` over HTTP, WebSocket (`auth` message), and Wyoming (voice only); unloaded values fall back silently to the configured default (see [spec](docs/superpowers/specs/2026-07-04-fase-3-model-voice-selection-design.md)).
   - **Fase 4** — barge-in: in-session `interrupt` (PR #6, 2026-07-02).
   - **Fase 6** — OpenAI-compatible `POST /v1/audio/speech`: Bearer auth, PCM16 + WAV output, streaming, OpenAI error envelope (PR #9, 2026-07-06).
 - **Active directions (GitHub issues):**
-  - [#12](https://github.com/Jota-project/jota-speaker/issues/12) — `voice` param: honor per-request voice selection.
   - [#13](https://github.com/Jota-project/jota-speaker/issues/13) — `speed` param: honor `speed` in `POST /v1/audio/speech`.
-  - [#14](https://github.com/Jota-project/jota-speaker/issues/14) — `GET /v1/models` endpoint: advertise available voices from `voices-v1.0.bin`.
+  - [#14](https://github.com/Jota-project/jota-speaker/issues/14) — `GET /v1/voices` endpoint (ElevenLabs-style, auto-discovery from `voices-v1.0.bin`).
   - [#15](https://github.com/Jota-project/jota-speaker/issues/15) — `instructions` field: honor SSML-like voice instructions per request.
   - [#16](https://github.com/Jota-project/jota-speaker/issues/16) — SSE/Realtime endpoint: OpenAI Realtime-style streaming.
   - [#17](https://github.com/Jota-project/jota-speaker/issues/17) — configurable bitrate for mp3/opus/aac response formats.
