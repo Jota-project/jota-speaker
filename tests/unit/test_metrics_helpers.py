@@ -4,7 +4,6 @@ Each test verifies the helper updates the underlying prometheus_client
 metric correctly. We read the registry via generate_latest() to keep
 tests independent of internal API.
 """
-import pytest
 from prometheus_client import REGISTRY, generate_latest
 
 from src.observability import metrics

@@ -40,7 +40,8 @@ def _gauge(name: str, **labels) -> float:
     from prometheus_client import REGISTRY, generate_latest
 
     output = generate_latest(REGISTRY).decode()
-    needle = f'{name}{{{",".join(f"{k}=\"{v}\"" for k, v in sorted(labels.items()))}}} '
+    label_str = ",".join(f'{k}="{v}"' for k, v in sorted(labels.items()))
+    needle = f"{name}{{{label_str}}} "
     for line in output.splitlines():
         if line.startswith(needle):
             return float(line.rsplit(" ", 1)[-1])
