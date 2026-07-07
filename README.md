@@ -479,6 +479,16 @@ curl http://localhost:8005/health
 # {"status":"ok"}
 ```
 
+### `GET /metrics`
+
+Prometheus scrape endpoint. Returns metrics in text format. No auth — same
+network-filtering treatment as `/health`. See [Observability](#observability)
+below for the full metric list.
+
+```bash
+curl http://localhost:8005/metrics
+```
+
 ### `POST /v1/audio/speech`
 
 OpenAI-compatible text-to-speech. Synthesizes the given text and returns
@@ -611,6 +621,58 @@ HA  →  { "type": "synthesize", "data": { "text": "Hola mundo" } }
 ```
 
 The Wyoming server runs on the same process as FastAPI, started in the lifespan hook and stopped on shutdown.
+
+---
+
+## Observability
+
+Prometheus metrics are exposed at `GET /metrics` on the same port as the
+WebSocket (`8005`). No auth — same network-filtering treatment as
+`/health`.
+
+### Available metrics
+
+| Name | Type | Labels |
+|------|------|--------|
+| `jota_speaker_ttfb_ms` | Histogram | `session_type`, `engine` |
+| `jota_speaker_barge_in_latency_ms` | Histogram | `session_type` |
+| `jota_speaker_sessions_active` | Gauge | `session_type` |
+| `jota_speaker_engine_synthesis_in_flight` | Gauge | — |
+| `jota_speaker_sessions_total` | Counter | `session_type`, `result` |
+| `jota_speaker_errors_total` | Counter | `code` |
+| `jota_speaker_chunks_total` | Counter | `result` |
+| `jota_speaker_interrupts_total` | Counter | — |
+
+`session_type` is `ws` or `wyoming`. TTFB is measured differently per
+transport: for WS, from the first `token` message to the first audio byte;
+for Wyoming, from the start of `_synthesize` to the first `audio-chunk`.
+
+### Sample Grafana queries
+
+```promql
+# TTFB p95 by session type (5-minute window)
+histogram_quantile(0.95,
+  sum(rate(jota_speaker_ttfb_ms_bucket[5m])) by (le, session_type)
+)
+
+# Barge-in latency p99
+histogram_quantile(0.99,
+  sum(rate(jota_speaker_barge_in_latency_ms_bucket[5m])) by (le)
+)
+
+# Active sessions
+jota_speaker_sessions_active
+
+# Error rate by code
+sum(rate(jota_speaker_errors_total[5m])) by (code)
+```
+
+### Disable
+
+Set `JOTA_METRICS_ENABLED=false` to make all helpers no-op (the endpoint
+still returns a 200 with no series — no behaviour change for scrapers).
+Instrumentation is also fail-safe on its own: if the underlying registry
+ever raises, helpers swallow the exception rather than crash the session.
 
 ---
 
