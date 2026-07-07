@@ -1,7 +1,9 @@
 import asyncio
+import time
 
 from src.core.config import Settings
 from src.core.logger import get_logger
+from src.observability.metrics import error_occurred, observe_ttfb_ms, session_ended, session_started
 from src.tts.interface import ITTSEngine
 from src.wyoming.protocol import read_event, write_event
 
@@ -16,6 +18,8 @@ class WyomingHandler:
     async def handle(self, reader: asyncio.StreamReader, writer) -> None:
         peer = writer.get_extra_info("peername")
         logger.info("Wyoming connection from %s", peer)
+        session_started("wyoming")
+        result = "ok"
         try:
             while True:
                 event_type, data, _ = await read_event(reader)
@@ -32,14 +36,17 @@ class WyomingHandler:
                             await self._synthesize(writer, text, requested_voice)
                         except Exception:
                             logger.exception("Synthesis error for text=%r", text)
+                            error_occurred("synthesis_error")
+                            result = "error"
         except (asyncio.IncompleteReadError, ConnectionResetError):
-            pass
+            result = "client_close"
         finally:
             writer.close()
             try:
                 await writer.wait_closed()
             except Exception:
                 pass
+            session_ended("wyoming", result)
             logger.info("Wyoming connection closed %s", peer)
 
     async def _describe(self, writer) -> None:
@@ -71,6 +78,16 @@ class WyomingHandler:
         rate = self._engine.sample_rate
         audio_info = {"rate": rate, "width": 2, "channels": 1}
         await write_event(writer, "audio-start", audio_info)
+        synth_start = time.monotonic()
+        first_chunk = True
         async for chunk in self._engine.synthesize(text, voice=voice):
+            if first_chunk:
+                first_chunk = False
+                elapsed_ms = (time.monotonic() - synth_start) * 1000
+                observe_ttfb_ms(
+                    elapsed_ms,
+                    session_type="wyoming",
+                    engine=self._engine.__class__.__name__.lower(),
+                )
             await write_event(writer, "audio-chunk", audio_info, payload=chunk)
         await write_event(writer, "audio-stop", {"timestamp": 0})
