@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     queue_maxsize: int = 100
     wyoming_enabled: bool = True
     wyoming_port: int = 20424
+    metrics_enabled: bool = True
 
 
 _settings: Settings | None = None

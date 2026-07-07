@@ -12,6 +12,7 @@ dependencies = [
     "numpy>=1.26",
     "httpx>=0.27",
     "num2words>=0.5.12",
+    "prometheus-client>=0.20",
 ]
 
 [project.optional-dependencies]
