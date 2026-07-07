@@ -1,3 +1,24 @@
+# [1.1.0](https://github.com/Jota-project/jota-speaker/compare/v1.0.0...v1.1.0) (2026-07-07)
+
+
+### Bug Fixes
+
+* **observability:** remove metric wrapper, add safe-guard to helpers ([6e9b890](https://github.com/Jota-project/jota-speaker/commit/6e9b890db1261c77ccbcf2e8cea3f7ea47085dd6))
+* **tests:** avoid backslash-in-nested-fstring syntax (Python 3.11 compat) ([3c800a5](https://github.com/Jota-project/jota-speaker/commit/3c800a5a36b4a9bd652e4f136cddbea919f12ad7))
+
+
+### Features
+
+* **config:** add metrics_enabled setting (JOTA_METRICS_ENABLED) ([c02f71e](https://github.com/Jota-project/jota-speaker/commit/c02f71efff2f3819a6151a7beafcd07aa222e7b4))
+* Fase 5 — Observabilidad Prometheus ([#36](https://github.com/Jota-project/jota-speaker/issues/36)) ([d49db7f](https://github.com/Jota-project/jota-speaker/commit/d49db7f6c636f2228ae7585a8ba6eb9ad5a1e85f))
+* **main:** GET /metrics endpoint + observability docs ([d6a1d7b](https://github.com/Jota-project/jota-speaker/commit/d6a1d7ba32bf21362151c40460f05c3395ea5e13))
+* **metrics:** JOTA_METRICS_ENABLED=false turns helpers into no-ops ([c902d6c](https://github.com/Jota-project/jota-speaker/commit/c902d6cdac400363dbb3bf3b88e62c09abaa70f3))
+* **observability:** prometheus metrics module + helpers ([dabfd0d](https://github.com/Jota-project/jota-speaker/commit/dabfd0da831c4343795af5e8faf7b761921fd43e))
+* **session:** _send_error wrapper records error metric ([e79a58b](https://github.com/Jota-project/jota-speaker/commit/e79a58b682433bcdc85f03e109f30cf84e2e351f))
+* **session:** instrument sessions gauge + chunks counter ([6de4fdc](https://github.com/Jota-project/jota-speaker/commit/6de4fdce2e95d118574a801f3420fe97f3b3444e))
+* **session:** measure TTFB in _synthesize_segment ([dfe5d72](https://github.com/Jota-project/jota-speaker/commit/dfe5d72eeb93aafeccac9f38cfd87e9589837f6b))
+* **wyoming:** instrument TTFB and session metrics ([f840993](https://github.com/Jota-project/jota-speaker/commit/f840993f003b224653f1f0781cfc016b242eba1d))
+
 # 1.0.0 (2026-07-06)
 
 
