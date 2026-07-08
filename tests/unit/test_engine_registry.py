@@ -40,3 +40,14 @@ async def test_aclose_closes_all_engines():
     registry = EngineRegistry({"a": a, "b": b}, "a")
     await registry.aclose()
     assert set(closed) == {a, b}
+
+
+def test_readiness_reports_is_ready_per_engine():
+    class NotReadyEngine(MockEngine):
+        @property
+        def is_ready(self) -> bool:
+            return False
+
+    a, b = MockEngine(), NotReadyEngine()
+    registry = EngineRegistry({"a": a, "b": b}, "a")
+    assert registry.readiness() == {"a": True, "b": False}

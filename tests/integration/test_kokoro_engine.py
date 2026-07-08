@@ -88,6 +88,14 @@ async def test_kokoro_engine_aclose_clears_resources(fake_kokoro):
     await eng.aclose()
 
 
+@pytest.mark.asyncio
+async def test_kokoro_engine_is_ready_reflects_loaded_state(fake_kokoro):
+    eng = KokoroEngine(model_path="x", voices_path="y", synthesize_timeout=None)
+    assert eng.is_ready is True
+    await eng.aclose()
+    assert eng.is_ready is False
+
+
 def test_default_voice_returns_configured_voice(fake_kokoro):
     eng = KokoroEngine(model_path="x", voices_path="y", voice="ef_dora", synthesize_timeout=None)
     assert eng.default_voice == "ef_dora"
