@@ -1,3 +1,11 @@
+## [1.1.1](https://github.com/Jota-project/jota-speaker/compare/v1.1.0...v1.1.1) (2026-07-08)
+
+
+### Bug Fixes
+
+* **engine:** stop closing the shared engine singleton on session teardown ([36dec6c](https://github.com/Jota-project/jota-speaker/commit/36dec6c1c3c14c5ece393e66b706c23597895d18)), closes [#37](https://github.com/Jota-project/jota-speaker/issues/37)
+* **engine:** stop closing the shared engine singleton on session teardown ([#39](https://github.com/Jota-project/jota-speaker/issues/39)) ([8f3ee40](https://github.com/Jota-project/jota-speaker/commit/8f3ee4079d35780dcbe8be25ff78ca44c512efdf)), closes [#37](https://github.com/Jota-project/jota-speaker/issues/37)
+
 # [1.1.0](https://github.com/Jota-project/jota-speaker/compare/v1.0.0...v1.1.0) (2026-07-07)
 
 
