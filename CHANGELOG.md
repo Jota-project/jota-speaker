@@ -1,3 +1,10 @@
+## [1.1.2](https://github.com/Jota-project/jota-speaker/compare/v1.1.1...v1.1.2) (2026-07-08)
+
+
+### Bug Fixes
+
+* **tts:** suppress PCM16 clicks at Kokoro chunk boundaries ([#49](https://github.com/Jota-project/jota-speaker/issues/49)) ([5e4f1ec](https://github.com/Jota-project/jota-speaker/commit/5e4f1ec68221a2c44cfdd1476e6f02e5d6d6dfad)), closes [#37](https://github.com/Jota-project/jota-speaker/issues/37) [#48](https://github.com/Jota-project/jota-speaker/issues/48)
+
 ## [1.1.1](https://github.com/Jota-project/jota-speaker/compare/v1.1.0...v1.1.1) (2026-07-08)
 
 
