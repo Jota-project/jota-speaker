@@ -5,11 +5,16 @@ from typing import AsyncIterator
 import numpy as np
 
 from src.core.logger import get_logger
+from src.tts.audio import _CROSSFADE_SAMPLES, iter_chunks_with_crossfade
 from src.tts.interface import ITTSEngine
 
 logger = get_logger(__name__)
 
 _CHUNK_SAMPLES = 4800  # 200ms at 24 kHz
+
+assert _CROSSFADE_SAMPLES <= _CHUNK_SAMPLES, (
+    "crossfade length must fit inside one chunk"
+)
 
 
 class KokoroEngine(ITTSEngine):
@@ -78,9 +83,8 @@ class KokoroEngine(ITTSEngine):
                 logger.error("Kokoro inference timed out after %.2fs", self.synthesize_timeout)
                 raise
 
-        for start in range(0, len(audio), _CHUNK_SAMPLES):
-            chunk = audio[start : start + _CHUNK_SAMPLES]
-            pcm16 = (chunk * 32767).astype(np.int16).tobytes()
+        for chunk_float in iter_chunks_with_crossfade(audio):
+            pcm16 = (chunk_float * 32767).astype(np.int16).tobytes()
             yield pcm16
 
     @property
