@@ -21,6 +21,10 @@ updates:
     labels:
       - "dependencies"
       - "docker"
+    ignore:
+      # kokoro-onnx (core TTS dependency) requires Python <3.14; revisit once it adds support
+      - dependency-name: "python"
+        versions: [">=3.14"]
 
   # GitHub Actions (workflows)
   - package-ecosystem: "github-actions"
