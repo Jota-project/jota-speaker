@@ -1,5 +1,5 @@
 # ── builder ───────────────────────────────────────────────────────────────────
-FROM python:3.11-slim AS builder
+FROM python:3.13-slim AS builder
 
 WORKDIR /app
 
@@ -11,7 +11,7 @@ COPY src/ ./src/
 RUN pip install --prefix=/install --no-cache-dir .
 
 # ── runtime ───────────────────────────────────────────────────────────────────
-FROM python:3.11-slim AS runtime
+FROM python:3.13-slim AS runtime
 
 WORKDIR /app
 
