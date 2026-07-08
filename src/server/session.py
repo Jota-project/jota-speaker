@@ -94,10 +94,12 @@ class SpeakerSession:
                     pass
                 except Exception as exc:
                     self._log.warning("TTS worker ended with error: %s", exc)
-            try:
-                await self._engine.aclose()
-            except Exception as exc:
-                self._log.warning("Engine aclose failed: %s", exc)
+            # NOTE: do not aclose() self._engine here. Engines are shared
+            # singletons owned by EngineRegistry (one instance per model,
+            # reused by every session, HTTP call, and Wyoming request) — see
+            # issue #37. Closing here would tear the engine down for the
+            # whole process. Real shutdown happens in EngineRegistry.aclose(),
+            # called from the app lifespan.
         self._log.info("Session ended")
 
     # ── authentication ────────────────────────────────────────────────────────

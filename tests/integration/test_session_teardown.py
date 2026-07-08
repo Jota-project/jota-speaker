@@ -13,20 +13,27 @@ from src.tts.interface import ITTSEngine
 
 
 class TrackingEngine(ITTSEngine):
+    """Mirrors KokoroEngine's real failure mode: aclose() tears down shared
+    state, and any subsequent use raises — instead of just counting calls."""
+
     def __init__(self) -> None:
         self._sample_rate = 24000
         self.aclose_called = 0
+        self.closed = False
 
     @property
     def sample_rate(self) -> int:
         return 24000
 
     async def synthesize(self, text: str, voice: str | None = None):
+        if self.closed:
+            raise RuntimeError("engine used after aclose()")
         await asyncio.sleep(0)
         yield b"\x00\x00" * 4800
 
     async def aclose(self) -> None:
         self.aclose_called += 1
+        self.closed = True
 
 
 def _setup(engine: ITTSEngine, **kwargs) -> TestClient:
@@ -40,7 +47,10 @@ def _setup(engine: ITTSEngine, **kwargs) -> TestClient:
     return TestClient(app)
 
 
-def test_session_timeout_calls_aclose_on_engine():
+def test_session_timeout_does_not_close_shared_engine():
+    # The engine in the registry is a shared singleton (one instance serves
+    # every session, HTTP call, and Wyoming request). A single session ending
+    # — even via timeout — must not tear it down for the whole process.
     engine = TrackingEngine()
     client = _setup(engine)
     with client.websocket_connect("/ws") as ws:
@@ -58,10 +68,10 @@ def test_session_timeout_calls_aclose_on_engine():
             except Exception:
                 break
             time.sleep(0.05)
-    assert engine.aclose_called == 1
+    assert engine.aclose_called == 0
 
 
-def test_session_normal_end_calls_aclose():
+def test_session_normal_end_does_not_close_shared_engine():
     engine = TrackingEngine()
     client = _setup(engine, session_timeout=10.0)
     with client.websocket_connect("/ws") as ws:
@@ -78,4 +88,32 @@ def test_session_normal_end_calls_aclose():
             except Exception:
                 break
             time.sleep(0.05)
-    assert engine.aclose_called == 1
+    assert engine.aclose_called == 0
+
+
+def test_engine_survives_across_sequential_sessions():
+    # Regression test for issue #37: a second session (or HTTP request) after
+    # the first session ends must still be able to use the shared engine.
+    engine = TrackingEngine()
+    client = _setup(engine, session_timeout=10.0)
+
+    def _run_one_session() -> None:
+        with client.websocket_connect("/ws") as ws:
+            ws.send_text(json.dumps({"type": "auth", "token": "t"}))
+            ws.receive_text()  # auth_ok
+            ws.send_text(json.dumps({"type": "end"}))
+            deadline = time.time() + 3.0
+            while time.time() < deadline:
+                try:
+                    data = ws.receive()
+                    if data.get("type") == "websocket.send" and data.get("text"):
+                        if json.loads(data["text"])["type"] == "done":
+                            break
+                except Exception:
+                    break
+                time.sleep(0.05)
+
+    _run_one_session()
+    assert not engine.closed, "engine must still be usable after the first session ends"
+    _run_one_session()
+    assert not engine.closed, "engine must still be usable after a second session ends"

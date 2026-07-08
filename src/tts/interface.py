@@ -27,6 +27,15 @@ class ITTSEngine(ABC):
         """Voice ids valid for `synthesize(voice=...)`. None means unrestricted."""
         return None
 
+    @property
+    def is_ready(self) -> bool:
+        """Whether this engine can currently serve synthesize()/available_voices().
+
+        False while the model is still loading, or if it was torn down
+        (e.g. mid-shutdown). Used by GET /ready.
+        """
+        return True
+
     def resolve_voice(self, requested: str | None) -> str:
         """Return `requested` if usable, else `default_voice`. Never raises."""
         available = self.available_voices()

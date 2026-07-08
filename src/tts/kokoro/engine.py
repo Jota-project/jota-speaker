@@ -47,6 +47,10 @@ class KokoroEngine(ITTSEngine):
     def sample_rate(self) -> int:
         return self._sample_rate
 
+    @property
+    def is_ready(self) -> bool:
+        return self._kokoro is not None
+
     async def synthesize(
         self, text: str, voice: str | None = None, speed: float | None = None
     ) -> AsyncIterator[bytes]:

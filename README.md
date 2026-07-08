@@ -40,6 +40,7 @@ Default voice: **ef_dora** (Spanish, female). Default language: **es**.
 4. [Audio format](#audio-format)
 5. [HTTP endpoints](#http-endpoints)
    - [`GET /health`](#get-health)
+   - [`GET /ready`](#get-ready)
    - [`POST /v1/audio/speech`](#post-v1audiospeech)
    - [`GET /v1/voices`](#get-v1voices)
 6. [Configuration](#configuration)
@@ -472,11 +473,26 @@ ffplay -f s16le -ar 24000 -ac 1 -
 
 ### `GET /health`
 
-Returns `200 OK` with `{"status": "ok"}` when the service is running.
+Liveness: `200 OK` with `{"status": "ok"}` whenever the process is up and
+serving requests. Does not check whether the TTS engine itself is usable —
+use `/ready` for that.
 
 ```bash
 curl http://localhost:8005/health
 # {"status":"ok"}
+```
+
+### `GET /ready`
+
+Readiness: `200 OK` once every configured TTS engine has finished loading
+and can serve `synthesize()`/`available_voices()`; `503` otherwise (e.g.
+still loading the model at startup). `docker-compose.yml`'s healthcheck
+targets this endpoint so the container is restarted if an engine ever dies
+without the process crashing.
+
+```bash
+curl http://localhost:8005/ready
+# {"status":"ready","engines":{"kokoro-v1.0.int8":true}}
 ```
 
 ### `GET /metrics`

@@ -13,7 +13,7 @@ services:
       JOTA_KOKORO_VOICES: /models/voices-v1.0.bin
       JOTA_AUTH_PROVIDER: stub
     healthcheck:
-      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8005/health')"]
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8005/ready')"]
       interval: 10s
       timeout: 5s
       retries: 3

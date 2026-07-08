@@ -64,7 +64,21 @@ app.include_router(openai_router)
 
 @app.get("/health")
 async def health() -> dict:
+    """Liveness: process is up and serving requests."""
     return {"status": "ok"}
+
+
+@app.get("/ready")
+async def ready(response: Response) -> dict:
+    """Readiness: TTS engines are loaded and able to synthesize.
+
+    Unlike /health, this can report not-ready (503) while the model is
+    still loading at startup, or if an engine was torn down unexpectedly.
+    """
+    engines = app.state.engine_registry.readiness()
+    all_ready = all(engines.values())
+    response.status_code = 200 if all_ready else 503
+    return {"status": "ready" if all_ready else "not_ready", "engines": engines}
 
 
 @app.get("/metrics")
