@@ -1,3 +1,10 @@
+## [1.1.3](https://github.com/Jota-project/jota-speaker/compare/v1.1.2...v1.1.3) (2026-07-09)
+
+
+### Bug Fixes
+
+* **session:** handle WebSocket close-race RuntimeError in TTS worker ([#50](https://github.com/Jota-project/jota-speaker/issues/50)) ([2fdbc4c](https://github.com/Jota-project/jota-speaker/commit/2fdbc4c0d8373b34cd55fd92bd8b6eccf0b26a81)), closes [#47](https://github.com/Jota-project/jota-speaker/issues/47)
+
 ## [1.1.2](https://github.com/Jota-project/jota-speaker/compare/v1.1.1...v1.1.2) (2026-07-08)
 
 
