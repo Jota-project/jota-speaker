@@ -236,7 +236,11 @@ class SpeakerSession:
                                     engine=self._engine.__class__.__name__.lower(),
                                 )
                         await self._ws.send_bytes(frame)
-                    except WebSocketDisconnect:
+                    except (WebSocketDisconnect, RuntimeError):
+                        # RuntimeError: Starlette raises this instead of
+                        # WebSocketDisconnect when the close race is lost
+                        # (send() called after a close message was already
+                        # sent) — see issue #47.
                         await self._send(ChunkAbortedMessage(chunk_id=chunk_id))
                         chunk_finished(aborted=True)
                         return
@@ -316,8 +320,14 @@ class SpeakerSession:
             return False
 
     async def _send(self, msg: Any) -> None:
-        if self._ws.client_state == WebSocketState.CONNECTED:
+        if self._ws.client_state != WebSocketState.CONNECTED:
+            return
+        try:
             await self._ws.send_text(serialize_server_message(msg))
+        except RuntimeError:
+            # Close race lost between the client_state check above and this
+            # send — Starlette already sent a close message. See issue #47.
+            pass
 
     async def _send_error(self, code: str, message: str) -> None:
         """Send an ErrorMessage and record the error metric."""
