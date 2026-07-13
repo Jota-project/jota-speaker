@@ -6,7 +6,7 @@ requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.139.0",
     "uvicorn[standard]>=0.51.0",
-    "websockets>=16.0",
+    "websockets>=16.1",
     "pydantic-settings>=2.14.2",
     "kokoro-onnx>=0.5.0",
     "numpy>=2.4.6",
