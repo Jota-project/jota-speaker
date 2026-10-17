@@ -1,6 +1,7 @@
 services:
 
   jota-speaker:
+    container_name: jota-speaker
     build: .
     ports:
       - "8005:8005"
