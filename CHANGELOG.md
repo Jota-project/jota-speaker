@@ -1,3 +1,10 @@
+## [1.1.6](https://github.com/Jota-project/jota-speaker/compare/v1.1.5...v1.1.6) (2026-10-26)
+
+
+### Bug Fixes
+
+* **ci:** drop unused ffmpeg install from test workflow ([#73](https://github.com/Jota-project/jota-speaker/issues/73)) ([f52d6a7](https://github.com/Jota-project/jota-speaker/commit/f52d6a708d957940ff688392b7d67e477455737f))
+
 ## [1.1.5](https://github.com/Jota-project/jota-speaker/compare/v1.1.4...v1.1.5) (2026-10-26)
 
 
