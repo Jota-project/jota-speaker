@@ -1,6 +1,7 @@
 [project]
 name = "jota-speaker"
 version = "0.1.0"
+license = "MIT"
 requires-python = ">=3.11"
 
 dependencies = [
