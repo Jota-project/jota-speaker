@@ -525,7 +525,7 @@ request and response shape.
 
 Unknown fields are silently dropped (clients sending `logprobs`, etc. work).
 
-**Auth:** `Authorization: Bearer <token>` (same provider as WebSocket/Wyoming).
+**Auth:** `Authorization: Bearer <token>` (same provider as the WebSocket; the Wyoming server does not authenticate).
 
 **Response:** 200 OK with the audio, either streamed chunked (`stream: true`, default) or fully buffered (`stream: false`):
 - `Content-Type: audio/pcm` for raw PCM16, `audio/wav` for RIFF/WAVE, `audio/mpeg` for MP3, `audio/ogg` for Opus, `audio/aac` for AAC, or `audio/flac` for FLAC.
