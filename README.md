@@ -143,7 +143,7 @@ The server accepts the connection immediately. **The first message you send must
 {"type": "auth_error", "reason": "Invalid token"}
 ```
 
-> **Note:** In development/CI mode (`JOTA_AUTH_PROVIDER=stub`) any non-empty token is accepted. In production (`JOTA_AUTH_PROVIDER=jota_db`) the token is validated against jota-db.
+> **Note:** With `JOTA_AUTH_PROVIDER=stub` (the default) any non-empty token is accepted — the service does not validate tokens, so restrict who can reach it at the network level. `JOTA_AUTH_PROVIDER=jota_db` validates the token against jota-db; this is a **legacy** mode: jota-db is deprecated (unused since jota-gateway v1.9.0) and will be archived.
 
 ---
 
@@ -589,10 +589,10 @@ All settings use the `JOTA_` prefix and can be set via environment variables or 
 | `JOTA_KOKORO_LANG` | `es` | Kokoro language code |
 | `JOTA_SAMPLE_RATE` | `24000` | Output sample rate (Hz) |
 | `JOTA_MIN_FLUSH_CHARS` | `80` | Flush buffer to TTS after this many chars without a sentence boundary |
-| `JOTA_AUTH_PROVIDER` | `stub` | Auth backend: `stub` (accept all) or `jota_db` |
-| `JOTA_JOTA_DB_URL` | `http://localhost:8001` | jota-db base URL |
-| `JOTA_JOTA_DB_AUTH_PATH` | `/auth/validate` | jota-db validation endpoint |
-| `JOTA_JOTA_DB_TIMEOUT` | `5.0` | jota-db request timeout (seconds) |
+| `JOTA_AUTH_PROVIDER` | `stub` | Auth backend: `stub` (accept all) or `jota_db` (legacy, jota-db is deprecated) |
+| `JOTA_JOTA_DB_URL` | `http://localhost:8001` | jota-db base URL (legacy `jota_db` mode only) |
+| `JOTA_JOTA_DB_AUTH_PATH` | `/auth/validate` | jota-db validation endpoint (legacy `jota_db` mode only) |
+| `JOTA_JOTA_DB_TIMEOUT` | `5.0` | jota-db request timeout in seconds (legacy `jota_db` mode only) |
 | `JOTA_SESSION_TIMEOUT` | `300.0` | Max WebSocket session duration in seconds |
 | `JOTA_QUEUE_MAXSIZE` | `100` | Max synthesis segments buffered per WebSocket session |
 | `JOTA_WYOMING_ENABLED` | `true` | Start the Wyoming TCP server |
@@ -762,7 +762,7 @@ Tests are also run automatically via GitHub Actions on every push and pull reque
 - Spanish text **normalization** — numbers, dates, hours, currency, emails, URLs, abbreviations.
 - **Barge-in** — interrupt playback mid-stream in <100 ms.
 
-**Authentication:** Bearer token validated against `jota-db` auth provider.
+**Authentication:** pluggable provider. Default `stub` accepts any token; `jota_db` (validation against jota-db) is legacy, since jota-db is deprecated.
 
 ### Backlog
 
