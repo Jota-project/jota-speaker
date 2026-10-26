@@ -1,3 +1,10 @@
+## [1.1.5](https://github.com/Jota-project/jota-speaker/compare/v1.1.4...v1.1.5) (2026-10-26)
+
+
+### Bug Fixes
+
+* **ci:** time-box ffmpeg install and bundle pending dependabot bumps ([#72](https://github.com/Jota-project/jota-speaker/issues/72)) ([b30c1db](https://github.com/Jota-project/jota-speaker/commit/b30c1dbfa81289cf4719ecd0c1fb73d07f7c3a90)), closes [#66](https://github.com/Jota-project/jota-speaker/issues/66) [#67](https://github.com/Jota-project/jota-speaker/issues/67) [#63](https://github.com/Jota-project/jota-speaker/issues/63)
+
 ## [1.1.4](https://github.com/Jota-project/jota-speaker/compare/v1.1.3...v1.1.4) (2026-10-26)
 
 
