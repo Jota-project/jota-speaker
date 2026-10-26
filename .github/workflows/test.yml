@@ -19,6 +19,15 @@ jobs:
           python-version: "3.11"
           cache: pip
 
+      - name: Install ffmpeg
+        # Static build from GitHub Releases: apt mirrors on hosted runners kept hanging.
+        timeout-minutes: 3
+        run: |
+          curl -fsSL --retry 3 --max-time 120 https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz \
+            | tar -xJ -C "$RUNNER_TEMP" --strip-components=2 --wildcards '*/bin/ffmpeg' '*/bin/ffprobe'
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/ffmpeg" -version > /dev/null && "$RUNNER_TEMP/ffprobe" -version > /dev/null
+
       - name: Install dependencies
         run: pip install -e ".[dev]"
 
@@ -36,6 +45,13 @@ jobs:
 
       - name: Integration tests
         run: python3 -m pytest tests/integration/ -v
+        env:
+          JOTA_ENGINE: mock
+          JOTA_AUTH_PROVIDER: stub
+          PYTHONPATH: .
+
+      - name: OpenAI API tests
+        run: python3 -m pytest tests/openai/ -v -rs
         env:
           JOTA_ENGINE: mock
           JOTA_AUTH_PROVIDER: stub
