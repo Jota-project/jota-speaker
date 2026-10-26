@@ -1,3 +1,10 @@
+## [1.1.4](https://github.com/Jota-project/jota-speaker/compare/v1.1.3...v1.1.4) (2026-10-26)
+
+
+### Bug Fixes
+
+* **ci:** pin ruff lint rules to the pre-0.16 default set ([#70](https://github.com/Jota-project/jota-speaker/issues/70)) ([cfc84cd](https://github.com/Jota-project/jota-speaker/commit/cfc84cda7e8eb84e6ad7d7fa6c3f0223c6e0164f)), closes [#69](https://github.com/Jota-project/jota-speaker/issues/69) [#68](https://github.com/Jota-project/jota-speaker/issues/68) [#65](https://github.com/Jota-project/jota-speaker/issues/65)
+
 ## [1.1.3](https://github.com/Jota-project/jota-speaker/compare/v1.1.2...v1.1.3) (2026-07-09)
 
 
