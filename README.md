@@ -788,3 +788,7 @@ Tests are also run automatically via GitHub Actions on every push and pull reque
 | [#9](https://github.com/Jota-project/jota-speaker/pull/9) | OpenAI-compatible POST /v1/audio/speech |
 | [#6](https://github.com/Jota-project/jota-speaker/pull/6) | Barge-in (<100 ms interrupt) |
 | [#4](https://github.com/Jota-project/jota-speaker/pull/4) | Spanish normalizer, robustness & teardown |
+
+## Licencia
+
+MIT. Ver [LICENSE](LICENSE).
