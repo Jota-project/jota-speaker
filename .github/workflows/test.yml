@@ -20,7 +20,14 @@ jobs:
           cache: pip
 
       - name: Install ffmpeg
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+        # apt mirrors on hosted runners sometimes hang forever; time-box each attempt and retry.
+        timeout-minutes: 8
+        run: |
+          for i in 1 2 3; do
+            timeout 120 sudo apt-get update && timeout 120 sudo apt-get install -y --no-install-recommends ffmpeg && break
+            sleep 5
+          done
+          command -v ffmpeg
 
       - name: Install dependencies
         run: pip install -e ".[dev]"
